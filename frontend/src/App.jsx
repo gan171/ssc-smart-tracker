@@ -8,6 +8,7 @@ import { Upload, Loader2, BookOpen, Brain, History } from 'lucide-react'
 import './App.css'
 
 function App() {
+    const API_BASE_URL = 'https://ssc-smart-tracker.onrender.com';
   const [loading, setLoading] = useState(false)
   const [analysis, setAnalysis] = useState(null)
   const [mistakes, setMistakes] = useState([]) // Store history
@@ -20,10 +21,19 @@ function App() {
 
   const fetchHistory = async () => {
     try {
-      const res = await axios.get('http://127.0.0.1:8000/mistakes/')
-      setMistakes(res.data)
+      // Use the template literal correctly with backticks
+      const res = await axios.get(`${API_BASE_URL}/mistakes/`)
+
+      // SAFETY CHECK: Only set mistakes if the response is actually an Array
+      if (Array.isArray(res.data)) {
+        setMistakes(res.data)
+      } else {
+        console.error("API returned non-array data:", res.data)
+        setMistakes([]) // Fallback to empty list so app doesn't crash
+      }
     } catch (err) {
       console.error("Failed to fetch history", err)
+      setMistakes([]) // Fallback on error
     }
   }
 
@@ -39,7 +49,7 @@ function App() {
     formData.append('file', file)
 
     try {
-      const response = await axios.post('http://127.0.0.1:8000/upload-screenshot/', formData, {
+      const response = await axios.post(`\${API_BASE_URL}/upload-screenshot/`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       setAnalysis(response.data.data)
@@ -108,7 +118,7 @@ function App() {
         </div>
 
         <div className="grid">
-          {mistakes.map((m) => (
+          {Array.isArray(mistakes) && mistakes.map((m) => (
             <div
               key={m.id}
               className="card history-card"
