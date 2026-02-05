@@ -4,8 +4,13 @@ frontend/node_modules/
 venv/
 .venv/
 __pycache__/
+**/__pycache__/
+*.pyc
 
 # Ignore secrets
-.env
+backend/.env
 .DS_Store
 dist/
+.env
+.env.local
+frontend/.env
