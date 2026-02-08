@@ -1,9 +1,6 @@
-from dotenv import load_dotenv
 import os
-
-# Load environment variables from .env file
+from dotenv import load_dotenv
 load_dotenv()
-
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from backend.database import supabase
