@@ -9,7 +9,7 @@ import 'katex/dist/katex.min.css'
 import { Upload, Loader2, Brain, History, Moon, Sun, LogOut, User } from 'lucide-react'
 
 function App() {
-  const API_BASE_URL = 'https://ssc-smart-tracker.onrender.com';
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://ssc-smart-tracker.onrender.com';
   const { user, signOut, loading: authLoading } = useAuth()
 
   // Theme State
@@ -73,6 +73,12 @@ function App() {
     try {
       // Get the session token
       const { data: { session } } = await supabase.auth.getSession()
+      // 🔍 ADD THESE DEBUG LOGS:
+        console.log('=== DEBUG ===')
+        console.log('Session:', session)
+        console.log('Token exists:', !!session?.access_token)
+        console.log('Token preview:', session?.access_token?.substring(0, 30))
+        console.log('=============')
 
       const response = await fetch(`${API_BASE_URL}/upload-screenshot/`, {
         method: 'POST',

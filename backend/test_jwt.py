@@ -1,26 +1,44 @@
 import os
-import jwt
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Get a token from your browser's console
-# After logging in, run: supabase.auth.getSession().then(d => console.log(d.data.session.access_token))
-TEST_TOKEN = "paste-your-token-here"
+import jwt
+from jwt import PyJWKClient
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+print(f"Supabase URL: {SUPABASE_URL}")
+
+# Test JWKS endpoint
+jwks_url = f"{SUPABASE_URL}/auth/v1/jwks"
+print(f"JWKS URL: {jwks_url}")
 
 try:
-    secret = os.getenv("SUPABASE_JWT_SECRET")
-    print(f"Secret length: {len(secret) if secret else 0}")
+    jwks_client = PyJWKClient(jwks_url)
+    print("✅ JWKS client created successfully")
 
+    # Paste a token from your browser console here
+    # Get it by running: await supabase.auth.getSession()
+    TEST_TOKEN = "PASTE_YOUR_TOKEN_HERE"
+
+    # Get signing key
+    signing_key = jwks_client.get_signing_key_from_jwt(TEST_TOKEN)
+    print(f"✅ Got signing key: {signing_key.key}")
+
+    # Decode token
     payload = jwt.decode(
         TEST_TOKEN,
-        secret,
-        algorithms=["HS256"],
+        signing_key.key,
+        algorithms=["ES256"],
         audience="authenticated"
     )
 
-    print("✅ JWT decode successful!")
+    print(f"✅ Token decoded successfully!")
     print(f"User ID: {payload.get('sub')}")
     print(f"Email: {payload.get('email')}")
+
 except Exception as e:
-    print(f"❌ JWT decode failed: {e}")
+    print(f"❌ Error: {e}")
+    import traceback
+
+    traceback.print_exc()
