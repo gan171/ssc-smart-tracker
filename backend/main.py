@@ -1,7 +1,8 @@
 from dotenv import load_dotenv
 import os
+import uuid
+from datetime import datetime
 
-# Load environment variables from .env file
 load_dotenv()
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
@@ -35,45 +36,22 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 async def get_current_user(authorization: Optional[str] = Header(None)):
     """Extract and verify user from JWT token using Supabase client"""
 
-    print("\n" + "=" * 50)
-    print("🔐 AUTH REQUEST RECEIVED")
-    print("=" * 50)
-
     if not authorization:
-        print("❌ No authorization header provided")
         raise HTTPException(status_code=401, detail="No authorization header")
 
     try:
-        # Extract token from "Bearer <token>"
         token = authorization.replace("Bearer ", "")
-        print(f"✅ Token received (length: {len(token)})")
+        response = supabase.auth.get_user(token)
+        user = response.user
 
-        # Use Supabase to get the user from the token
-        try:
-            response = supabase.auth.get_user(token)
-            user = response.user
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
 
-            if not user:
-                print("❌ No user found for token")
-                raise HTTPException(status_code=401, detail="Invalid token")
+        return user.id
 
-            user_id = user.id
-            print(f"✅ User authenticated via Supabase!")
-            print(f"   User ID: {user_id}")
-            print(f"   Email: {user.email}")
-            print("=" * 50 + "\n")
-
-            return user_id
-
-        except Exception as e:
-            print(f"❌ Supabase auth error: {e}")
-            raise HTTPException(status_code=401, detail=f"Invalid or expired token: {str(e)}")
-
-    except HTTPException:
-        raise
     except Exception as e:
-        print(f"❌ Unexpected error: {e}")
-        raise HTTPException(status_code=401, detail=f"Authentication error: {str(e)}")
+        print(f"❌ Auth error: {e}")
+        raise HTTPException(status_code=401, detail=f"Invalid or expired token: {str(e)}")
 
 
 @app.get("/")
@@ -93,8 +71,33 @@ async def upload_screenshot(
         contents = await file.read()
         print(f"📄 File size: {len(contents)} bytes")
 
-        # 2. Get Analysis from Gemini
-        print("🤖 Calling Gemini AI...")
+        # 2. Upload image to Supabase Storage
+        image_url = None
+        try:
+            # Generate unique filename
+            file_extension = file.filename.split('.')[-1] if '.' in file.filename else 'png'
+            unique_filename = f"{user_id}/{uuid.uuid4()}.{file_extension}"
+
+            print(f"☁️  Uploading to Supabase Storage: {unique_filename}")
+
+            # Upload to storage
+            storage_response = supabase_admin.storage.from_('question-images').upload(
+                unique_filename,
+                contents,
+                file_options={"content-type": file.content_type or "image/png"}
+            )
+
+            # Get public URL
+            image_url = supabase_admin.storage.from_('question-images').get_public_url(unique_filename)
+            print(f"✅ Image uploaded: {image_url}")
+
+        except Exception as storage_error:
+            print(f"⚠️  Storage upload failed: {storage_error}")
+            # Continue without image URL - not critical
+            image_url = None
+
+        # 3. Get Enhanced Analysis from Gemini
+        print("🤖 Calling Gemini AI for enhanced analysis...")
         ai_data = analyze_screenshot(contents)
 
         if "error" in ai_data:
@@ -102,12 +105,42 @@ async def upload_screenshot(
             raise HTTPException(status_code=500, detail=ai_data["error"])
 
         print(f"✅ Gemini analysis complete")
+        print(f"   Type: {ai_data.get('question_type')}")
+        print(f"   Visual Elements: {ai_data.get('has_visual_elements')}")
+        print(f"   AI Confidence: {ai_data.get('ai_confidence')}")
 
-        # 3. Handle Database (Check for Duplicates for THIS USER)
-        question_text = ai_data.get("question_text")
-        print(f"🔍 Question: {question_text[:50]}...")
+        # 4. Prepare database data with enhanced fields
+        question_text = ai_data.get("question_text", "")
 
-        # A. Check if this question already exists for this user
+        db_data = {
+            "user_id": user_id,
+            "image_url": image_url,
+
+            # Enhanced question data
+            "question_text": question_text,
+            "question_context": ai_data.get("question_context", ""),
+            "actual_question": ai_data.get("actual_question", question_text),
+
+            "subject": ai_data.get("subject"),
+            "topic": ai_data.get("topic"),
+
+            # Options and answers
+            "options": ai_data.get("options", []),
+            "correct_option": ai_data.get("correct_answer"),
+
+            # Question metadata
+            "question_type": ai_data.get("question_type", "mcq"),
+            "has_visual_elements": ai_data.get("has_visual_elements", False),
+            "visual_complexity": ai_data.get("visual_complexity", "low"),
+            "ai_confidence": ai_data.get("ai_confidence", "high"),
+
+            # Complete AI response
+            "content": ai_data,
+
+            "status": "analyzed"
+        }
+
+        # 5. Check for duplicates (by question text and user)
         existing_q = supabase_admin.table("questions") \
             .select("id") \
             .eq("question_text", question_text) \
@@ -119,17 +152,14 @@ async def upload_screenshot(
         if existing_q.data:
             print(f"♻️ Duplicate found. Using existing ID: {existing_q.data[0]['id']}")
             new_id = existing_q.data[0]['id']
-        else:
-            # New question! Insert it
-            db_data = {
-                "user_id": user_id,
-                "question_text": question_text,
-                "subject": ai_data.get("subject"),
-                "topic": ai_data.get("topic"),
-                "content": ai_data,
-                "status": "analyzed"
-            }
 
+            # Update with new image and analysis if available
+            if image_url:
+                supabase_admin.table("questions").update({
+                    "image_url": image_url,
+                    "content": ai_data
+                }).eq("id", new_id).execute()
+        else:
             print(f"💾 Inserting new question for user: {user_id}")
 
             response = supabase_admin.table("questions").insert(db_data).execute()
@@ -137,22 +167,18 @@ async def upload_screenshot(
             if response.data:
                 new_id = response.data[0]['id']
                 print(f"✅ Question saved! ID: {new_id}")
-
-                # Verify it was saved with user_id
-                verify = supabase_admin.table("questions").select("user_id").eq("id", new_id).execute()
-                if verify.data:
-                    saved_user_id = verify.data[0].get('user_id')
-                    print(f"✅ VERIFIED: user_id in database = {saved_user_id}")
-                    if saved_user_id != user_id:
-                        print(f"⚠️  WARNING: Mismatch! Expected {user_id}, got {saved_user_id}")
             else:
                 print(f"⚠️  Insert returned no data")
 
         print(f"✅ Upload complete!\n")
+
         return {
             "status": "success",
             "id": new_id,
-            "data": ai_data
+            "data": ai_data,
+            "image_url": image_url,
+            "has_visual_elements": ai_data.get("has_visual_elements", False),
+            "ai_confidence": ai_data.get("ai_confidence", "high")
         }
 
     except HTTPException:
@@ -166,7 +192,7 @@ async def upload_screenshot(
 
 @app.get("/mistakes/")
 def get_mistakes(user_id: str = Depends(get_current_user)):
-    """Fetches the user's last 20 logged mistakes"""
+    """Fetches user's mistakes with enhanced data"""
     try:
         print(f"\n📋 FETCHING MISTAKES for user: {user_id}")
 
@@ -174,7 +200,7 @@ def get_mistakes(user_id: str = Depends(get_current_user)):
             .select("*") \
             .eq("user_id", user_id) \
             .order("created_at", desc=True) \
-            .limit(20) \
+            .limit(100) \
             .execute()
 
         print(f"✅ Found {len(response.data)} mistakes\n")
@@ -182,4 +208,70 @@ def get_mistakes(user_id: str = Depends(get_current_user)):
 
     except Exception as e:
         print(f"❌ Error fetching mistakes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/question/{question_id}")
+def get_question(question_id: str, user_id: str = Depends(get_current_user)):
+    """Get a specific question with all details"""
+    try:
+        response = supabase_admin.table("questions") \
+            .select("*") \
+            .eq("id", question_id) \
+            .eq("user_id", user_id) \
+            .single() \
+            .execute()
+
+        return response.data
+
+    except Exception as e:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+
+@app.patch("/question/{question_id}/answer")
+def submit_answer(
+        question_id: str,
+        answer_data: dict,
+        user_id: str = Depends(get_current_user)
+):
+    """Submit user's answer and update statistics"""
+    try:
+        user_answer = answer_data.get("answer")
+
+        # Get the question
+        question = supabase_admin.table("questions") \
+            .select("correct_option, times_attempted, times_correct") \
+            .eq("id", question_id) \
+            .eq("user_id", user_id) \
+            .single() \
+            .execute()
+
+        if not question.data:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        # Check if correct
+        is_correct = user_answer == question.data["correct_option"]
+
+        # Update statistics
+        times_attempted = (question.data.get("times_attempted") or 0) + 1
+        times_correct = (question.data.get("times_correct") or 0) + (1 if is_correct else 0)
+
+        supabase_admin.table("questions").update({
+            "user_answer": user_answer,
+            "times_attempted": times_attempted,
+            "times_correct": times_correct,
+            "last_attempted_at": datetime.now().isoformat()
+        }).eq("id", question_id).eq("user_id", user_id).execute()
+
+        return {
+            "is_correct": is_correct,
+            "correct_answer": question.data["correct_option"],
+            "times_attempted": times_attempted,
+            "times_correct": times_correct,
+            "accuracy": round((times_correct / times_attempted) * 100, 1) if times_attempted > 0 else 0
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
