@@ -7,12 +7,35 @@ load_dotenv()
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from backend.database import supabase as supabase_admin
 from backend.services.ai_engine import analyze_screenshot
+from backend.services.pdf_service import fetch_questions_for_export, generate_custom_revision_pdf
 from typing import Optional
 from supabase import create_client, Client
+from pydantic import BaseModel, Field
 
 app = FastAPI(title="SSC CGL Smart Tracker API")
+
+
+class PdfFilters(BaseModel):
+    subject: str = "all"
+    topic: str = "all"
+    question_source: str = "all"
+    date_range: str = "all_time"
+    quantity: int = Field(default=50, ge=1, le=500)
+
+
+class PdfOptions(BaseModel):
+    include_solution: bool = True
+    include_user_notes: bool = True
+    include_ai_analysis: bool = True
+    include_answer_key: bool = False
+
+
+class CustomPdfPayload(BaseModel):
+    filters: PdfFilters
+    options: PdfOptions
 
 app.add_middleware(
     CORSMiddleware,
@@ -275,3 +298,22 @@ def submit_answer(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/generate-custom-pdf")
+def generate_custom_pdf(payload: CustomPdfPayload, user_id: str = Depends(get_current_user)):
+    try:
+        questions = fetch_questions_for_export(supabase_admin, user_id, payload.filters.model_dump())
+        pdf_bytes = generate_custom_revision_pdf(questions, payload.options.model_dump())
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": "attachment; filename=ssc-revision-export.pdf",
+                "X-Question-Count": str(len(questions))
+            },
+        )
+    except Exception as e:
+        print(f"❌ Error generating custom PDF: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate PDF")

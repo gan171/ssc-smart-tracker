@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   Upload, Target, TrendingUp, Flame, Award,
   PlayCircle, BarChart3, Clock, CheckCircle, Circle,
-  Sparkles, Zap, BookOpen, FileText, Edit3, Save, Filter
+  Sparkles, Zap, BookOpen, FileText, Edit3, Save, Download
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -13,6 +13,7 @@ function Dashboard({
   onMockTestClick,
   onQuestionClick,
   onAddNote,
+  onExportClick,
   darkMode
 }) {
   const [activeTab, setActiveTab] = useState('recent')
@@ -312,6 +313,33 @@ function Dashboard({
               <div className="flex items-center gap-2 text-green-600 dark:text-green-400 font-semibold group-hover:gap-3 transition-all">
                 {totalQuestions} Ready
                 <PlayCircle size={16} />
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Export PDF Card */}
+          <motion.div
+            variants={cardVariants}
+            initial="hidden"
+            animate="visible"
+            transition={{ delay: 0.3 }}
+            className="group relative overflow-hidden rounded-2xl p-8 cursor-pointer transition-all hover:scale-105 md:col-span-3"
+            style={{
+              background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(239, 68, 68, 0.1) 100%)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 255, 255, 0.2)'
+            }}
+            onClick={onExportClick}
+          >
+            <div className="absolute -top-20 -right-20 w-40 h-40 bg-amber-500/30 rounded-full blur-3xl group-hover:bg-amber-500/50 transition-all" />
+
+            <div className="relative z-10 flex items-center justify-between gap-8">
+              <div>
+                <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Export PDF</h3>
+                <p className="text-gray-600 dark:text-gray-400">Build a custom revision black book with filters and toggles.</p>
+              </div>
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-red-500 flex items-center justify-center shadow-xl shadow-amber-500/30 group-hover:shadow-amber-500/50 transition-all">
+                <Download size={30} className="text-white" />
               </div>
             </div>
           </motion.div>
