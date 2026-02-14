@@ -190,6 +190,20 @@ function MockTest({ questions, onComplete, onExit, timeLimit }) {
                          isCorrect ? <span className="text-green-600 dark:text-green-400 font-medium">✓ Correct!</span> :
                          <span className="text-red-600 dark:text-red-400 font-medium">Your answer: {userAnswer} | Correct answer: {q.correct_option}</span>}
                       </div>
+
+                      {/* Show AI Analysis when toggle is ON */}
+                      {showImageDescriptions && q.content?.detailed_analysis && (
+                        <div className="mt-4 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-lg">
+                          <div className="flex items-center gap-2 mb-3">
+                            <span className="text-orange-600 dark:text-orange-400 font-semibold text-sm">
+                              🤖 AI Solution:
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-800 dark:text-gray-200">
+                            <RenderText content={q.content.detailed_analysis} />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
