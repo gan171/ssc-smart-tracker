@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
+import { normalizeMathText } from '../utils/mathText'
 
 function AnalysisModal({ isOpen, analysis, question, onClose }) {
   if (!isOpen) return null
@@ -27,7 +28,7 @@ function AnalysisModal({ isOpen, analysis, question, onClose }) {
   const RenderText = ({ content }) => (
     <div className="text-gray-800 dark:text-gray-200 leading-relaxed">
       <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-        {content || ''}
+        {normalizeMathText(content)}
       </ReactMarkdown>
     </div>
   )
