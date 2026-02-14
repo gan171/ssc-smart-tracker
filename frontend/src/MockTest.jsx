@@ -75,10 +75,10 @@ function MockTest({ questions, onComplete, onExit, timeLimit }) {
     return { correct, incorrect, unanswered }
   }
 
-  const RenderText = ({ content }) => (
+  const RenderText = ({ content,wrapExpression=false }) => (
     <div className="text-gray-800 dark:text-gray-200 leading-relaxed">
       <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-        {normalizeMathText(content)}
+        {normalizeMathText(content, { wrapExpression })}
       </ReactMarkdown>
     </div>
   )
@@ -172,7 +172,7 @@ function MockTest({ questions, onComplete, onExit, timeLimit }) {
                           }`}>
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-gray-800 dark:text-gray-200">{opt.label}.</span>
-                              <span className="flex-1 text-gray-800 dark:text-gray-200"><RenderText content={opt.text} /></span>
+                              <span className="flex-1 text-gray-800 dark:text-gray-200"><RenderText content={opt.text} wrapExpression /></span>
                               {opt.label === q.correct_option && <CheckCircle className="text-green-500 flex-shrink-0" size={16} />}
                               {opt.label === userAnswer && !isCorrect && <XCircle className="text-red-500 flex-shrink-0" size={16} />}
                             </div>
@@ -318,7 +318,7 @@ function MockTest({ questions, onComplete, onExit, timeLimit }) {
                         answers[currentQuestion.id] === opt.label ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                       }`}>{opt.label}</div>
                       <div className="flex-1 pt-1">
-                        <div className="text-gray-800 dark:text-gray-200"><RenderText content={opt.text} /></div>
+                        <div className="text-gray-800 dark:text-gray-200"><RenderText content={opt.text} wrapExpression /></div>
                         {showImageDescriptions && opt.is_visual && opt.visual_description && (
                           <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-sm">
                             <span className="font-semibold text-blue-700 dark:text-blue-300">AI: </span>
