@@ -8,6 +8,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
+import LandingPage from './LandingPage'
 import {
   Upload, Loader2, Brain, History, Moon, Sun, LogOut, User,
   Filter, CheckCircle, Circle, FileText, PlayCircle, Home
@@ -16,6 +17,11 @@ import {
 function App() {
   const API_BASE_URL = 'http://127.0.0.1:8000'; // Change to Render URL for production
   const { user, signOut, loading: authLoading } = useAuth()
+
+  // New State for View Control
+  // If user is logged in, we never show landing page.
+  // If user is NOT logged in, we default to Landing Page.
+  const [showLanding, setShowLanding] = useState(true)
 
   // View States
   const [currentView, setCurrentView] = useState('home') // 'home', 'mockSetup', 'mockTest'
@@ -57,6 +63,7 @@ function App() {
   // Fetch History when user logs in
   useEffect(() => {
     if (user) {
+        setShowLanding(false)
       fetchHistory()
     }
   }, [user])
@@ -286,8 +293,49 @@ function App() {
     )
   }
 
-  if (!user) {
-    return <Auth />
+  // 1. If not logged in AND showLanding is true -> Show Landing Page
+  if (!user && showLanding) {
+    return (
+      <>
+        {/* Simple Nav for Landing Page */}
+        <nav className="absolute top-0 left-0 w-full p-6 flex justify-between items-center z-50">
+           <div className="font-bold text-2xl tracking-tighter flex items-center gap-2 dark:text-white">
+              <Brain className="text-blue-500" /> SSC Tracker
+           </div>
+           <div className="flex items-center gap-4">
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="p-2 rounded-full glass hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                {darkMode ? <Sun size={20} className="text-yellow-400" /> : <Moon size={20} className="text-gray-600" />}
+              </button>
+              <button
+                onClick={() => setShowLanding(false)} // Go to Auth
+                className="font-medium hover:text-blue-500 dark:text-gray-300 transition-colors"
+              >
+                Login
+              </button>
+           </div>
+        </nav>
+        <LandingPage onGetStarted={() => setShowLanding(false)} />
+      </>
+    )
+  }
+
+  // 2. If not logged in AND showLanding is false -> Show Auth (Login/Signup)
+  if (!user && !showLanding) {
+    return (
+      <div className="relative">
+        {/* Back button to return to Landing Page */}
+        <button
+          onClick={() => setShowLanding(true)}
+          className="absolute top-4 left-4 z-50 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+        >
+          <Home size={24} className="text-gray-600 dark:text-gray-400" />
+        </button>
+        <Auth />
+      </div>
+    )
   }
 
   // Mock Test Setup View

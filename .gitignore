@@ -1,4 +1,4 @@
-# Ignore heavy dependencies
+# --- Dependencies ---
 node_modules/
 frontend/node_modules/
 venv/
@@ -7,11 +7,28 @@ __pycache__/
 **/__pycache__/
 *.pyc
 
-# Ignore secrets
-backend/.env
-.DS_Store
-dist/
+# --- Secrets & Environment ---
 .env
 .env.local
+.env.*.local
+backend/.env
 frontend/.env
 backend/services/__pycache__/ai_engine.cpython-311.pyc
+
+# --- Build Outputs ---
+dist/
+build/
+frontend/dist/
+
+# --- IDE & Editor (Important) ---
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- System & Logs ---
+.DS_Store
+Thumbs.db
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
