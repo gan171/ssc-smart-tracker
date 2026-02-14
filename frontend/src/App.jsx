@@ -14,6 +14,7 @@ import MockTest from './MockTest'
 import UploadModal from './components/UploadModal'
 import BulkUploadModal from './components/BulkUploadModal'
 import AnalysisModal from './components/AnalysisModal'
+import ExportModal from './components/ExportModal'
 import TopNav from './components/TopNav'
 
 import { Loader2 } from 'lucide-react'
@@ -41,6 +42,7 @@ function App() {
   // Modal States
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showBulkModal, setShowBulkModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 })
   const [selectedQuestion, setSelectedQuestion] = useState(null)
 
@@ -168,6 +170,7 @@ function App() {
         onMockTestClick={handleMockTest}
         onQuestionClick={handleQuestionClick}
         onAddNote={addNote}
+        onExportClick={() => setShowExportModal(true)}
         darkMode={darkMode}
       />
 
@@ -194,6 +197,12 @@ function App() {
         analysis={analysis || (selectedQuestion?.content)}
         question={selectedQuestion}
         onClose={handleCloseAnalysis}
+      />
+
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        mistakes={mistakes}
       />
     </div>
   )
