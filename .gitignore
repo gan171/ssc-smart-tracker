@@ -14,3 +14,4 @@ dist/
 .env
 .env.local
 frontend/.env
+backend/services/__pycache__/ai_engine.cpython-311.pyc

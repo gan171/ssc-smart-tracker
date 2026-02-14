@@ -2,18 +2,24 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import { useAuth } from './AuthContext'
 import Auth from './Auth'
+import MockTestSetup from './MockTestSetup'
+import MockTest from './MockTest'
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 import {
   Upload, Loader2, Brain, History, Moon, Sun, LogOut, User,
-  Filter, CheckCircle, Circle, XCircle, FileText, TrendingUp
+  Filter, CheckCircle, Circle, FileText, PlayCircle, Home
 } from 'lucide-react'
 
 function App() {
-  const API_BASE_URL = 'http://127.0.0.1:8000'; // Change back to Render URL for production
+  const API_BASE_URL = 'http://127.0.0.1:8000'; // Change to Render URL for production
   const { user, signOut, loading: authLoading } = useAuth()
+
+  // View States
+  const [currentView, setCurrentView] = useState('home') // 'home', 'mockSetup', 'mockTest'
+  const [mockTestConfig, setMockTestConfig] = useState(null)
 
   // Theme State
   const [darkMode, setDarkMode] = useState(() => {
@@ -69,7 +75,6 @@ function App() {
       if (error) throw error
 
       console.log('📊 Fetched questions:', data.length)
-      console.log('📊 Questions with null user_id:', data.filter(q => !q.user_id).length)
 
       setMistakes(data || [])
     } catch (err) {
@@ -91,13 +96,7 @@ function App() {
     formData.append('file', file)
 
     try {
-      // Get fresh session for this upload
       const { data: { session } } = await supabase.auth.getSession()
-
-      console.log('🔐 Session for upload:', {
-        hasToken: !!session?.access_token,
-        userId: session?.user?.id
-      })
 
       const response = await fetch(`${API_BASE_URL}/upload-screenshot/`, {
         method: 'POST',
@@ -107,27 +106,21 @@ function App() {
         body: formData
       })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('Upload failed:', errorText)
-        throw new Error('Upload failed')
-      }
+      if (!response.ok) throw new Error('Upload failed')
 
       const result = await response.json()
-      console.log('✅ Upload result:', result)
       setAnalysis(result.data)
 
-      // Wait a bit before fetching to ensure DB is updated
       setTimeout(fetchHistory, 500)
     } catch (err) {
       setError("Failed to analyze image. Please try again.")
-      console.error('Upload error:', err)
+      console.error(err)
     } finally {
       setLoading(false)
     }
   }
 
-  // Bulk Upload Handler - IMPROVED
+  // Bulk Upload Handler
   const handleBulkUpload = async (event) => {
     const files = Array.from(event.target.files)
     if (files.length === 0) return
@@ -139,28 +132,15 @@ function App() {
     setBulkProgress({ current: 0, total: files.length })
     setError(null)
 
-    const results = {
-      success: 0,
-      failed: 0,
-      errors: []
-    }
+    const results = { success: 0, failed: 0 }
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
 
       try {
         setBulkProgress({ current: i + 1, total: files.length })
-        console.log(`📤 Uploading file ${i + 1}/${files.length}: ${file.name}`)
 
-        // Get FRESH session for EACH upload
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-
-        if (sessionError || !session?.access_token) {
-          console.error('❌ Session error:', sessionError)
-          throw new Error('Authentication failed')
-        }
-
-        console.log('🔐 Using token for file', i + 1, '- User:', session.user.id)
+        const { data: { session } } = await supabase.auth.getSession()
 
         const formData = new FormData()
         formData.append('file', file)
@@ -168,29 +148,22 @@ function App() {
         const response = await fetch(`${API_BASE_URL}/upload-screenshot/`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${session.access_token}` // Fresh token for each request
+            'Authorization': `Bearer ${session.access_token}`
           },
           body: formData
         })
 
         if (!response.ok) {
-          const errorText = await response.text()
-          console.error(`❌ Failed to upload ${file.name}:`, errorText)
           results.failed++
-          results.errors.push({ file: file.name, error: errorText })
         } else {
-          const result = await response.json()
-          console.log(`✅ Successfully uploaded ${file.name}, ID:`, result.id)
           results.success++
         }
 
-        // Longer delay between uploads to avoid race conditions
         await new Promise(resolve => setTimeout(resolve, 1000))
 
       } catch (err) {
-        console.error(`❌ Error uploading ${file.name}:`, err)
+        console.error(`Error uploading ${file.name}:`, err)
         results.failed++
-        results.errors.push({ file: file.name, error: err.message })
       }
     }
 
@@ -203,7 +176,6 @@ function App() {
     setIsBulkUploading(false)
     setBulkFiles([])
 
-    // Wait for DB to settle before fetching
     setTimeout(fetchHistory, 1500)
   }
 
@@ -223,6 +195,50 @@ function App() {
       fetchHistory()
     } catch (err) {
       console.error('Failed to update status:', err)
+    }
+  }
+
+  // Mock Test Handlers
+  const handleStartMockTest = () => {
+    setCurrentView('mockSetup')
+  }
+
+  const handleMockTestConfig = (config) => {
+    setMockTestConfig(config)
+    setCurrentView('mockTest')
+  }
+
+  const handleMockTestComplete = async (answers) => {
+    // Save performance data to backend
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+
+      for (const [questionId, userAnswer] of Object.entries(answers)) {
+        await fetch(`${API_BASE_URL}/question/${questionId}/answer`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${session?.access_token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ answer: userAnswer })
+        })
+      }
+
+      // Refresh data
+      fetchHistory()
+    } catch (err) {
+      console.error('Failed to save test results:', err)
+    }
+
+    // Return to home
+    setCurrentView('home')
+    setMockTestConfig(null)
+  }
+
+  const handleMockTestExit = () => {
+    if (confirm('Are you sure you want to exit? Your progress will be lost.')) {
+      setCurrentView('home')
+      setMockTestConfig(null)
     }
   }
 
@@ -274,6 +290,32 @@ function App() {
     return <Auth />
   }
 
+  // Mock Test Setup View
+  if (currentView === 'mockSetup') {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-8 px-4">
+        <MockTestSetup
+          mistakes={mistakes}
+          onStartTest={handleMockTestConfig}
+          onCancel={() => setCurrentView('home')}
+        />
+      </div>
+    )
+  }
+
+  // Mock Test View
+  if (currentView === 'mockTest' && mockTestConfig) {
+    return (
+      <MockTest
+        questions={mockTestConfig.questions}
+        timeLimit={mockTestConfig.timeLimit}
+        onComplete={handleMockTestComplete}
+        onExit={handleMockTestExit}
+      />
+    )
+  }
+
+  // Home View
   return (
     <div className="min-h-screen w-full bg-gray-50 dark:bg-gray-950 transition-colors duration-300 py-8 px-4 flex justify-center">
       <div className="w-full max-w-6xl">
@@ -306,6 +348,22 @@ function App() {
             </button>
           </div>
         </div>
+
+        {/* MOCK TEST CTA */}
+        {mistakes.length > 0 && (
+          <div className="mb-8">
+            <button
+              onClick={handleStartMockTest}
+              className="w-full p-6 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-2xl shadow-lg transition-all flex items-center justify-center gap-3 group"
+            >
+              <PlayCircle size={32} className="group-hover:scale-110 transition-transform" />
+              <div className="text-left">
+                <div className="text-2xl font-bold">Take Mock Test</div>
+                <div className="text-sm opacity-90">Practice with your saved questions</div>
+              </div>
+            </button>
+          </div>
+        )}
 
         {/* UPLOAD SECTION */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
@@ -384,9 +442,43 @@ function App() {
                 </span>
               </div>
               <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Question</h2>
-              <div className="text-gray-700 dark:text-gray-200 text-lg">
+              <div className="text-gray-700 dark:text-gray-200 text-lg mb-4">
                 <RenderText content={analysis.question_text} />
               </div>
+
+              {/* Show Options */}
+              {analysis.options && analysis.options.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Options:</h3>
+                  <div className="space-y-2">
+                    {analysis.options.map(opt => (
+                      <div
+                        key={opt.label}
+                        className={`p-3 rounded-lg border ${
+                          opt.label === analysis.correct_answer
+                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                            : 'border-gray-200 dark:border-gray-700'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <span className="font-semibold text-gray-800 dark:text-gray-200">{opt.label}.</span>
+                          <span className="flex-1 text-gray-800 dark:text-gray-200">
+                            <RenderText content={opt.text} />
+                          </span>
+                          {opt.label === analysis.correct_answer && (
+                            <CheckCircle className="text-green-500 flex-shrink-0" size={16} />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {analysis.correct_answer && (
+                    <div className="mt-3 text-sm text-green-600 dark:text-green-400 font-medium">
+                      ✓ Correct Answer: {analysis.correct_answer}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-800 p-6">

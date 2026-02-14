@@ -1,5 +1,5 @@
 """
-Enhanced AI Engine for SSC Smart Tracker
+Enhanced AI Engine for SSC Smart Tracker - WITH JSON ERROR HANDLING
 Extracts complete questions with options, context, and visual element detection
 WITH the cocky teacher personality and complete analysis structure
 """
@@ -8,8 +8,8 @@ import google.generativeai as genai
 import os
 from PIL import Image
 import io
-import base64
 import json
+import re
 
 # Configure Gemini
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -23,6 +23,12 @@ ENHANCED_SYSTEM_PROMPT = """You are an arrogant, cocky, and brutally honest SSC 
 - Use competitive language: "The top rankers see this instantly"
 - Be ruthlessly honest: "You call yourself prepared? This is SSC CGL 101"
 - BUT remain educational and genuinely helpful beneath the arrogance
+
+**CRITICAL JSON FORMATTING RULES:**
+- Use double backslashes for LaTeX: \\frac, \\sqrt, \\theta (not single \)
+- For newlines in strings, use actual newlines or \\n (not \n)
+- Avoid unescaped special characters in descriptions
+- Test all JSON before outputting
 
 **ANALYSIS STRUCTURE (MANDATORY):**
 
@@ -57,6 +63,7 @@ Your 'detailed_analysis' MUST follow this exact structure:
 
 **MATH FORMATTING RULES:**
 - Use LaTeX for ALL mathematical expressions
+- ALWAYS use double backslash: \\frac{a}{b}, \\sqrt{x}, \\theta
 - Inline math: $x + y = 5$
 - Display math: $$\\int_a^b f(x)dx$$
 - Fractions: $\\frac{numerator}{denominator}$
@@ -75,6 +82,7 @@ ENHANCED_EXTRACTION_PROMPT = """Now analyze this SSC CGL question screenshot and
    - For cloze tests: The COMPLETE paragraph with blanks marked as _____ or (1), (2), etc.
    - For tables: Describe the complete table structure and all data
    - For diagrams: Detailed description of the geometric figure or chart
+   - For paper folding: Describe EACH step clearly: "fold down", "fold left", "cut circle", etc.
    - DO NOT truncate or summarize - get EVERYTHING
 
 2. **EXACT QUESTION**: Extract the specific question being asked
@@ -83,14 +91,16 @@ ENHANCED_EXTRACTION_PROMPT = """Now analyze this SSC CGL question screenshot and
 
 3. **ALL OPTIONS**: Extract ALL options (A, B, C, D) with complete text
    - Full text of each option
-   - If options contain math, use LaTeX: $\\frac{5}{3}$, $\\sqrt{7}$, etc.
+   - If options contain math, use LaTeX with DOUBLE backslash: $\\frac{5}{3}$, $\\sqrt{7}$
    - Preserve mathematical notation exactly
 
 4. **VISUAL ELEMENTS DETECTION**:
-   - Detect if the question contains: geometric figures, diagrams, charts, graphs, patterns, non-verbal elements
+   - Detect if the question contains: geometric figures, diagrams, charts, graphs, patterns, non-verbal elements, paper folding sequences
    - For visual options: Set "is_visual": true and provide detailed description
-   - Estimate coordinates: "top-left", "second row", "bottom-right quadrant", etc.
+   - For paper folding: Describe the unfolded pattern position (e.g., "center", "corners", "edges")
+   - Estimate coordinates: "top-left", "center", "all four corners", "bottom-right quadrant", etc.
    - Describe patterns in non-verbal reasoning: "increasing triangles with rotating circles"
+   - IMPORTANT: Keep descriptions simple, avoid special characters that break JSON
 
 5. **CORRECT ANSWER**: 
    - Identify which option is marked/indicated as correct
@@ -102,7 +112,7 @@ ENHANCED_EXTRACTION_PROMPT = """Now analyze this SSC CGL question screenshot and
 - **passage**: Reading comprehension (has passage + question)
 - **cloze**: Paragraph with blanks to fill
 - **geometry**: Involves geometric figures, angles, shapes
-- **non_verbal**: Pattern recognition, visual series, figure-based
+- **non_verbal**: Pattern recognition, visual series, figure-based, paper folding
 - **table_based**: Data interpretation from tables/charts
 - **arithmetic**: Pure calculation-based
 - **algebra**: Equations, expressions, algebraic manipulation
@@ -110,12 +120,12 @@ ENHANCED_EXTRACTION_PROMPT = """Now analyze this SSC CGL question screenshot and
 **VISUAL COMPLEXITY ASSESSMENT:**
 - **low**: Pure text, simple equations, no diagrams
 - **medium**: Simple diagrams, basic tables, single geometric figure, straightforward charts
-- **high**: Complex diagrams, multiple figures, non-verbal patterns, intricate geometry, abstract visual elements
+- **high**: Complex diagrams, multiple figures, non-verbal patterns, intricate geometry, abstract visual elements, paper folding
 
 **AI CONFIDENCE ASSESSMENT:**
 - **high**: All text clearly visible, standard format, options extractable, no complex visuals
 - **medium**: Some visual elements but manageable, slightly unclear text, simple diagrams
-- **low**: Heavy visual content, non-verbal reasoning, very unclear text, complex patterns
+- **low**: Heavy visual content, non-verbal reasoning, very unclear text, complex patterns, paper folding
 
 **OUTPUT FORMAT (Strict JSON):**
 ```json
@@ -123,67 +133,124 @@ ENHANCED_EXTRACTION_PROMPT = """Now analyze this SSC CGL question screenshot and
   "question_type": "mcq|passage|cloze|geometry|non_verbal|table_based|arithmetic|algebra",
   "subject": "Math|English|Reasoning|GK",
   "topic": "Specific topic name",
-
-  "question_context": "COMPLETE passage/paragraph/table/diagram description. Empty string if N/A. For passages: Include EVERY LINE. For cloze: Include COMPLETE paragraph. For diagrams: Detailed description.",
-
+  
+  "question_context": "COMPLETE description. For paper folding: Step 1: fold down, Step 2: fold left, Step 3: cut circle at center. Use simple language, avoid special chars.",
+  
   "actual_question": "The specific question being asked (the question stem only)",
-
+  
   "question_text": "Combined display text (context + question). This is what user sees.",
-
+  
   "options": [
     {
       "label": "A",
-      "text": "Complete text of option A with LaTeX if needed: $x^2 + 5$",
-      "is_visual": false,
-      "visual_description": null,
-      "coordinates": null
+      "text": "Option A text or 'See visual option A in image'",
+      "is_visual": true,
+      "visual_description": "Simple description: circle pattern in four corners",
+      "coordinates": "all four corners"
     },
     {
       "label": "B",
-      "text": "Complete text of option B",
-      "is_visual": false,
-      "visual_description": null,
-      "coordinates": null
+      "text": "Option B",
+      "is_visual": true,
+      "visual_description": "Simple description: circles in center only",
+      "coordinates": "center"
     },
     {
       "label": "C",
-      "text": "Complete text of option C",
+      "text": "Option C",
       "is_visual": false,
       "visual_description": null,
       "coordinates": null
     },
     {
       "label": "D",
-      "text": "Complete text of option D",
+      "text": "Option D",
       "is_visual": false,
       "visual_description": null,
       "coordinates": null
     }
   ],
-
+  
   "correct_answer": "A|B|C|D or null if not visible",
-
-  "has_visual_elements": true/false,
-  "visual_complexity": "low|medium|high",
-  "ai_confidence": "high|medium|low",
-
-  "detailed_analysis": "Your COMPLETE cocky teacher analysis following the 5-part structure:\n\n1. **The Core Concept:** [Full explanation with LaTeX math]\n\n2. **The Examiner's Trap:** [Why students fail this]\n\n3. **Level Up:** [Harder variation]\n\n4. **Nearby Concepts:** [Related topics to master]\n\n5. **Active Practice:** [Leave empty]\n\nUse proper LaTeX: $x^2$, $$\\frac{a}{b}$$, $\\sqrt{x}$, etc.",
-
-  "practice_question": "A challenging practice question with proper LaTeX math formatting",
+  
+  "has_visual_elements": true,
+  "visual_complexity": "high",
+  "ai_confidence": "medium",
+  
+  "detailed_analysis": "Your COMPLETE cocky teacher analysis following the 5-part structure. Use double backslash for LaTeX: \\\\frac{a}{b}",
+  
+  "practice_question": "A challenging practice question with proper LaTeX math formatting using double backslash",
   "practice_answer": "Brief answer to practice question with key calculation steps"
 }
 ```
 
-**CRITICAL REMINDERS:**
-- Extract COMPLETE context (full passages, not summaries!)
-- Use LaTeX for all math: $x^2$, $\\frac{a}{b}$, $\\sqrt{x}$
-- Maintain cocky teacher personality in detailed_analysis
-- Follow the 5-part analysis structure EXACTLY
-- For visual options in non-verbal: describe each figure in detail
-- Estimate coordinates for visual elements when possible
+**CRITICAL REMINDERS FOR JSON:**
+- Use DOUBLE backslash in LaTeX: \\\\frac not \\frac
+- Keep visual descriptions simple and short
+- Avoid special characters that break JSON
+- Test the JSON structure before outputting
 
 Now analyze this question image with your signature arrogance and expertise:
 """
+
+
+def clean_json_string(text):
+    """Clean up common JSON formatting issues from AI responses"""
+    # Remove markdown code blocks
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    text = text.strip()
+
+    # Fix common escape issues
+    # Replace single backslashes followed by common chars (but not already escaped)
+    # This is tricky - we want \n to become \\n but not \\n to become \\\\n
+
+    return text
+
+
+def parse_json_safely(json_string):
+    """Try multiple methods to parse potentially malformed JSON"""
+
+    # Method 1: Direct parse
+    try:
+        return json.loads(json_string)
+    except json.JSONDecodeError as e:
+        print(f"   ⚠️  Direct JSON parse failed: {e}")
+
+    # Method 2: Try to fix common escape issues
+    try:
+        # Fix unescaped backslashes in LaTeX (but be careful not to double-escape)
+        # This is complex, so we'll use regex carefully
+        fixed = json_string
+
+        # Find all strings in JSON and fix backslashes
+        # This is a simplified approach - replace \frac with \\frac, etc.
+        latex_commands = ['frac', 'sqrt', 'theta', 'alpha', 'beta', 'gamma', 'int', 'sum', 'lim']
+        for cmd in latex_commands:
+            # Replace \command with \\command (but not \\command)
+            fixed = re.sub(f'(?<!\\\\)\\\\{cmd}', f'\\\\\\\\{cmd}', fixed)
+
+        return json.loads(fixed)
+    except json.JSONDecodeError as e:
+        print(f"   ⚠️  Fixed JSON parse failed: {e}")
+
+    # Method 3: Extract just the JSON object
+    try:
+        # Find the outermost { }
+        start = json_string.find('{')
+        end = json_string.rfind('}')
+        if start != -1 and end != -1:
+            json_only = json_string[start:end+1]
+            return json.loads(json_only)
+    except json.JSONDecodeError:
+        pass
+
+    # If all else fails, return None
+    return None
 
 
 def analyze_screenshot(image_bytes):
@@ -209,18 +276,35 @@ def analyze_screenshot(image_bytes):
         # Parse response
         response_text = response.text.strip()
 
-        # Remove markdown code blocks if present
-        if response_text.startswith("```json"):
-            response_text = response_text[7:]
-        if response_text.startswith("```"):
-            response_text = response_text[3:]
-        if response_text.endswith("```"):
-            response_text = response_text[:-3]
-        response_text = response_text.strip()
+        print(f"   📝 Raw response length: {len(response_text)} chars")
 
-        # Parse JSON
+        # Clean and parse JSON
+        cleaned = clean_json_string(response_text)
+        ai_data = parse_json_safely(cleaned)
 
-        ai_data = json.loads(response_text)
+        if ai_data is None:
+            print(f"   ❌ All JSON parsing methods failed")
+            print(f"   📄 Response preview: {response_text[:500]}...")
+
+            # Return a structured error response
+            return {
+                "error": "Failed to parse AI response as valid JSON",
+                "raw_response": response_text[:1000],
+                "subject": "Unknown",
+                "topic": "Parsing Error",
+                "question_text": "The AI response could not be parsed. The question image has been saved.",
+                "options": [
+                    {"label": "A", "text": "Option A (not extracted)", "is_visual": True},
+                    {"label": "B", "text": "Option B (not extracted)", "is_visual": True},
+                    {"label": "C", "text": "Option C (not extracted)", "is_visual": True},
+                    {"label": "D", "text": "Option D (not extracted)", "is_visual": True}
+                ],
+                "detailed_analysis": "The AI encountered an error parsing this question. However, the image has been saved and you can view it in your mistake bank. This typically happens with complex visual questions.",
+                "has_visual_elements": True,
+                "visual_complexity": "high",
+                "ai_confidence": "low",
+                "question_type": "non_verbal"
+            }
 
         # Validate required fields
         required_fields = ["question_type", "subject", "topic", "question_text", "options", "detailed_analysis"]
@@ -254,14 +338,10 @@ def analyze_screenshot(image_bytes):
             # If no options extracted, create placeholders
             print("   ⚠️  No options extracted, creating placeholders")
             ai_data["options"] = [
-                {"label": "A", "text": "Option A (not extracted)", "is_visual": False, "visual_description": None,
-                 "coordinates": None},
-                {"label": "B", "text": "Option B (not extracted)", "is_visual": False, "visual_description": None,
-                 "coordinates": None},
-                {"label": "C", "text": "Option C (not extracted)", "is_visual": False, "visual_description": None,
-                 "coordinates": None},
-                {"label": "D", "text": "Option D (not extracted)", "is_visual": False, "visual_description": None,
-                 "coordinates": None}
+                {"label": "A", "text": "Option A (not extracted)", "is_visual": True, "visual_description": "See image", "coordinates": "top"},
+                {"label": "B", "text": "Option B (not extracted)", "is_visual": True, "visual_description": "See image", "coordinates": "middle-top"},
+                {"label": "C", "text": "Option C (not extracted)", "is_visual": True, "visual_description": "See image", "coordinates": "middle-bottom"},
+                {"label": "D", "text": "Option D (not extracted)", "is_visual": True, "visual_description": "See image", "coordinates": "bottom"}
             ]
 
         # Validate detailed_analysis structure
@@ -284,24 +364,6 @@ def analyze_screenshot(image_bytes):
 
         return ai_data
 
-    except json.JSONDecodeError as e:
-        print(f"   ❌ JSON parsing error: {e}")
-        print(f"   Raw response preview: {response_text[:300]}...")
-
-        # Return error with raw response for debugging
-        return {
-            "error": "Failed to parse AI response as JSON",
-            "raw_response": response_text[:1000],
-            "subject": "Unknown",
-            "topic": "Error",
-            "question_text": "Failed to extract question. Please try again.",
-            "options": [],
-            "detailed_analysis": "The AI response could not be parsed. This is likely due to malformed JSON in the response.",
-            "has_visual_elements": False,
-            "visual_complexity": "unknown",
-            "ai_confidence": "low"
-        }
-
     except Exception as e:
         print(f"   ❌ Error in analysis: {str(e)}")
         import traceback
@@ -311,12 +373,18 @@ def analyze_screenshot(image_bytes):
             "error": str(e),
             "subject": "Unknown",
             "topic": "Error",
-            "question_text": "An error occurred during analysis.",
-            "options": [],
-            "detailed_analysis": f"Error: {str(e)}",
-            "has_visual_elements": False,
+            "question_text": "An error occurred during analysis. The image has been saved.",
+            "options": [
+                {"label": "A", "text": "See image", "is_visual": True},
+                {"label": "B", "text": "See image", "is_visual": True},
+                {"label": "C", "text": "See image", "is_visual": True},
+                {"label": "D", "text": "See image", "is_visual": True}
+            ],
+            "detailed_analysis": f"Error: {str(e)}. The question image has been saved and you can view it in your mistake bank.",
+            "has_visual_elements": True,
             "visual_complexity": "unknown",
-            "ai_confidence": "low"
+            "ai_confidence": "low",
+            "question_type": "non_verbal"
         }
 
 
@@ -328,7 +396,7 @@ def get_simple_analysis(image_bytes):
     try:
         print("   ... Using simple analysis fallback ...")
 
-        model = genai.GenerativeModel('gemini-flash-latest')
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
         simple_prompt = """You are a cocky SSC CGL teacher. Analyze this question and provide:
 
@@ -341,9 +409,9 @@ def get_simple_analysis(image_bytes):
    - Level Up variation
    - Nearby Concepts
 
-Use LaTeX for math: $x^2$, $\\frac{a}{b}$, etc.
+Use LaTeX for math with DOUBLE backslash: \\frac{a}{b}, \\sqrt{x}
 
-Return as JSON:
+Return ONLY valid JSON (no markdown):
 {
   "subject": "...",
   "topic": "...",
@@ -356,15 +424,11 @@ Return as JSON:
         response = model.generate_content([simple_prompt, image])
 
         response_text = response.text.strip()
-        if response_text.startswith("```json"):
-            response_text = response_text[7:]
-        if response_text.startswith("```"):
-            response_text = response_text[3:]
-        if response_text.endswith("```"):
-            response_text = response_text[:-3]
+        cleaned = clean_json_string(response_text)
+        result = parse_json_safely(cleaned)
 
-        import json
-        result = json.loads(response_text.strip())
+        if result is None:
+            raise Exception("Failed to parse simple analysis JSON")
 
         # Add default fields for compatibility
         result.setdefault("options", [])
@@ -382,7 +446,10 @@ Return as JSON:
             "error": str(e),
             "subject": "Unknown",
             "topic": "Error",
-            "question_text": "Failed to analyze question",
-            "detailed_analysis": "Analysis failed",
-            "options": []
+            "question_text": "Failed to analyze question. Image has been saved.",
+            "detailed_analysis": "Analysis failed. You can view the image in your mistake bank.",
+            "options": [],
+            "has_visual_elements": True,
+            "visual_complexity": "high",
+            "ai_confidence": "low"
         }
