@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SSC Tracker Settings</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 350px;
+      padding: 20px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .header h1 {
+      font-size: 20px;
+      margin-bottom: 5px;
+    }
+
+    .header p {
+      font-size: 12px;
+      opacity: 0.9;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      opacity: 0.9;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #333;
+      font-size: 14px;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: #3B82F6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+      background: white;
+      color: #667eea;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .status {
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      text-align: center;
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+
+    .status-success {
+      background: rgba(16, 185, 129, 0.9);
+    }
+
+    .status-error {
+      background: rgba(239, 68, 68, 0.9);
+    }
+
+    .status-info {
+      background: rgba(59, 130, 246, 0.9);
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .stat-item {
+      text-align: center;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      opacity: 0.8;
+      margin-top: 4px;
+    }
+
+    .help-text {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-top: 8px;
+    }
+
+    .link {
+      color: white;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>📌 SSC Smart Tracker</h1>
+    <p>Testbook Integration</p>
+  </div>
+
+  <div id="statusMessage" class="status hidden"></div>
+
+  <div class="card">
+    <div class="form-group">
+      <label for="apiToken">Your API Token</label>
+      <input
+        type="password"
+        id="apiToken"
+        placeholder="Paste your token here"
+      >
+      <div class="help-text">
+        Get your token from <span class="link" id="dashboardLink">Dashboard → Settings</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="apiUrl">Backend URL (optional)</label>
+      <input
+        type="text"
+        id="apiUrl"
+        placeholder="http://127.0.0.1:8000"
+        value="http://127.0.0.1:8000"
+      >
+    </div>
+
+    <button class="btn btn-primary" id="saveBtn">
+      Save Settings
+    </button>
+  </div>
+
+  <div class="card">
+    <h3 style="font-size: 14px; margin-bottom: 12px;">📊 Session Stats</h3>
+    <div class="stats">
+      <div class="stat-item">
+        <div class="stat-value" id="questionsAdded">0</div>
+        <div class="stat-label">Added Today</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="questionsTotal">0</div>
+        <div class="stat-label">Total</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding: 12px;">
+    <div style="font-size: 11px; opacity: 0.8; text-align: center;">
+      <p>✨ Enjoying the extension?</p>
+      <p style="margin-top: 4px;">Star it on <span class="link" id="githubLink">GitHub</span></p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
