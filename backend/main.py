@@ -37,11 +37,18 @@ class CustomPdfPayload(BaseModel):
     filters: PdfFilters
     options: PdfOptions
 
+ALLOWED_ORIGINS=[
+        "http://localhost:5173",  # Local Vite frontend
+        "http://127.0.0.1:5173",  # Local Vite frontend alternate
+        "http://localhost:5173",  # Local frontend (if using port 3000)
+        "https://ssc-smart-tracker.vercel.app/",  # TODO: Add your actual production frontend URL
+        "chrome-extension://oahgmbneapjnkmmncgkjlkicdngobfoe"  # TODO: Replace with your actual Chrome Extension ID
+    ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,   # Strictly restricted origins
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"], # Be explicit instead of "*"
     allow_headers=["*"],
 )
 
@@ -73,8 +80,11 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
         return user.id
 
     except Exception as e:
-        print(f"❌ Auth error: {e}")
-        raise HTTPException(status_code=401, detail=f"Invalid or expired token: {str(e)}")
+        # LOG the detailed error to your server console for debugging
+        print(f"❌ Auth error [Internal]: {str(e)}")
+
+        # RETURN a generic, safe error to the client
+        raise HTTPException(status_code=401, detail="Invalid or expired authentication token")
 
 
 @app.get("/")
