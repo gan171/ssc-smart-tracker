@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -317,3 +317,303 @@ def generate_custom_pdf(payload: CustomPdfPayload, user_id: str = Depends(get_cu
     except Exception as e:
         print(f"❌ Error generating custom PDF: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate PDF")
+
+class ReviewAnswerPayload(BaseModel):
+    answer: str
+    is_correct: bool
+
+
+@app.patch("/question/{question_id}/review")
+def submit_review_answer(
+        question_id: str,
+        payload: ReviewAnswerPayload,
+        user_id: str = Depends(get_current_user)
+):
+    """
+    Submit answer for spaced repetition review
+    Updates: times_attempted, times_correct, next_review_date, ease_factor, interval_days, mastery_level
+    """
+    try:
+        # Get current question data
+        question = supabase_admin.table("questions") \
+            .select("*") \
+            .eq("id", question_id) \
+            .eq("user_id", user_id) \
+            .single() \
+            .execute()
+
+        if not question.data:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        q = question.data
+
+        # Current values
+        times_attempted = (q.get("times_attempted") or 0) + 1
+        times_correct = (q.get("times_correct") or 0) + (1 if payload.is_correct else 0)
+        current_ease = q.get("ease_factor") or 2.5
+        current_interval = q.get("interval_days") or 1
+
+        # Calculate consecutive correct answers
+        # For simplicity, we'll track this in a separate way
+        # In full implementation, you'd want another column for this
+
+        # SM-2 Algorithm Implementation
+        new_ease = current_ease
+        new_interval = current_interval
+
+        if payload.is_correct:
+            # Correct answer - increase interval
+            if times_correct == 1:
+                new_interval = 1  # Review tomorrow
+            elif times_correct == 2:
+                new_interval = 6  # Review in 6 days
+            else:
+                new_interval = round(current_interval * current_ease)
+
+            # Adjust ease factor (quality = 4 for "good")
+            new_ease = current_ease + (0.1 - (5 - 4) * (0.08 + (5 - 4) * 0.02))
+            new_ease = max(1.3, new_ease)
+
+        else:
+            # Incorrect answer - reset interval
+            new_interval = 1  # Review tomorrow
+
+            # Decrease ease factor (quality = 0 for "fail")
+            new_ease = current_ease + (0.1 - (5 - 0) * (0.08 + (5 - 0) * 0.02))
+            new_ease = max(1.3, new_ease)
+
+        # Calculate next review date
+        next_review = datetime.now() + timedelta(days=new_interval)
+
+        # Determine mastery level
+        accuracy = times_correct / times_attempted if times_attempted > 0 else 0
+
+        if times_attempted <= 2:
+            mastery_level = "learning"
+        elif accuracy >= 0.8 and times_attempted >= 5:
+            mastery_level = "mastered"
+        elif accuracy >= 0.6:
+            mastery_level = "reviewing"
+        else:
+            mastery_level = "learning"
+
+        # Update database
+        supabase_admin.table("questions").update({
+            "user_answer": payload.answer,
+            "times_attempted": times_attempted,
+            "times_correct": times_correct,
+            "last_attempted_at": datetime.now().isoformat(),
+            "next_review_date": next_review.isoformat(),
+            "ease_factor": round(new_ease, 2),
+            "interval_days": new_interval,
+            "mastery_level": mastery_level
+        }).eq("id", question_id).eq("user_id", user_id).execute()
+
+        return {
+            "is_correct": payload.is_correct,
+            "correct_answer": q["correct_option"],
+            "times_attempted": times_attempted,
+            "times_correct": times_correct,
+            "accuracy": round((times_correct / times_attempted) * 100, 1),
+            "next_review_date": next_review.isoformat(),
+            "interval_days": new_interval,
+            "mastery_level": mastery_level,
+            "message": f"Great! See you in {new_interval} day{'s' if new_interval != 1 else ''}!" if payload.is_correct else "Let's review this again tomorrow!"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in review submission: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/questions/review-queue")
+def get_review_queue(user_id: str = Depends(get_current_user)):
+    """
+    Get questions due for review
+    Returns questions sorted by priority (overdue first, then by next_review_date)
+    """
+    try:
+        now = datetime.now().isoformat()
+
+        # Get all questions due within next 7 days
+        response = supabase_admin.table("questions") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .lte("next_review_date", (datetime.now() + timedelta(days=7)).isoformat()) \
+            .order("next_review_date", desc=False) \
+            .execute()
+
+        questions = response.data or []
+
+        # Categorize
+        categorized = {
+            "overdue": [],
+            "due_today": [],
+            "due_soon": [],
+            "upcoming": []
+        }
+
+        today = datetime.now().date()
+
+        for q in questions:
+            review_date = datetime.fromisoformat(q["next_review_date"]).date()
+
+            if review_date < today:
+                categorized["overdue"].append(q)
+            elif review_date == today:
+                categorized["due_today"].append(q)
+            elif review_date <= (today + timedelta(days=3)):
+                categorized["due_soon"].append(q)
+            else:
+                categorized["upcoming"].append(q)
+
+        return {
+            "categorized": categorized,
+            "stats": {
+                "total_due": len(categorized["overdue"]) + len(categorized["due_today"]),
+                "overdue_count": len(categorized["overdue"]),
+                "today_count": len(categorized["due_today"]),
+                "week_count": len(questions)
+            }
+        }
+
+    except Exception as e:
+        print(f"Error fetching review queue: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Add this to your main.py
+
+from pydantic import BaseModel
+from typing import List, Optional
+
+
+class QuestionOption(BaseModel):
+    label: str
+    text: str
+
+
+class ImportQuestionPayload(BaseModel):
+    question_text: str
+    options: List[QuestionOption]
+    correct_option: str
+    user_answer: Optional[str] = None
+    explanation: Optional[str] = None
+    source: str = "extension"
+    has_visual_elements: bool = False
+    subject: Optional[str] = None
+    topic: Optional[str] = None
+
+
+@app.post("/import-question/")
+async def import_question(
+        payload: ImportQuestionPayload,
+        user_id: str = Depends(get_current_user)
+):
+    """
+    Import question directly from extension (JSON format)
+    No image processing needed
+    """
+    try:
+        print(f"\n📥 IMPORT REQUEST from user: {user_id}")
+        print(f"Source: {payload.source}")
+        print(f"Question: {payload.question_text[:50]}...")
+
+        # If no image, we need to use AI to analyze the text-only question
+        # For now, we'll create a basic structure
+
+        # Convert options to expected format
+        options_list = [
+            {
+                "label": opt.label,
+                "text": opt.text,
+                "is_visual": False
+            }
+            for opt in payload.options
+        ]
+
+        # If we have subject/topic from extension, use them
+        # Otherwise, try to infer from question text (optional)
+        subject = payload.subject
+        topic = payload.topic
+
+        if not subject:
+            # Simple keyword matching (you can enhance this)
+            question_lower = payload.question_text.lower()
+            if any(word in question_lower for word in ['equation', 'algebra', 'number', 'calculate']):
+                subject = "Math"
+            elif any(word in question_lower for word in ['grammar', 'sentence', 'word', 'vocabulary']):
+                subject = "English"
+            elif any(word in question_lower for word in ['reasoning', 'pattern', 'logic']):
+                subject = "Reasoning"
+            else:
+                subject = "General Knowledge"
+
+        # Create content structure
+        content = {
+            "question_text": payload.question_text,
+            "options": options_list,
+            "correct_answer": payload.correct_option,
+            "subject": subject,
+            "topic": topic or "General",
+            "question_type": "mcq",
+            "has_visual_elements": payload.has_visual_elements,
+            "source": payload.source,
+            "detailed_analysis": payload.explanation or "Analysis not available from source platform."
+        }
+
+        # Check for duplicates
+        existing_q = supabase_admin.table("questions") \
+            .select("id") \
+            .eq("question_text", payload.question_text) \
+            .eq("user_id", user_id) \
+            .execute()
+
+        if existing_q.data:
+            print(f"♻️ Duplicate found. Using existing ID: {existing_q.data[0]['id']}")
+            return {
+                "status": "duplicate",
+                "id": existing_q.data[0]['id'],
+                "message": "Question already exists in your tracker"
+            }
+
+        # Insert new question
+        db_data = {
+            "user_id": user_id,
+            "question_text": payload.question_text,
+            "subject": subject,
+            "topic": topic or "General",
+            "options": options_list,
+            "correct_option": payload.correct_option,
+            "user_answer": payload.user_answer,
+            "question_type": "mcq",
+            "has_visual_elements": payload.has_visual_elements,
+            "content": content,
+            "status": "analyzed",
+            "ai_confidence": "high"
+        }
+
+        response = supabase_admin.table("questions").insert(db_data).execute()
+
+        if response.data:
+            new_id = response.data[0]['id']
+            print(f"✅ Question imported! ID: {new_id}")
+
+            return {
+                "status": "success",
+                "id": new_id,
+                "data": content,
+                "message": "Question imported successfully"
+            }
+        else:
+            raise Exception("Insert returned no data")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ IMPORT ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
