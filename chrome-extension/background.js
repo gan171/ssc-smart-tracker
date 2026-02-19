@@ -53,28 +53,58 @@ async function persistCapture(captureMapKey, message, sender) {
 }
 
 async function sendToBackendIfConfigured(capture) {
-  const { sscBackendUrl = '', sscBackendToken = '' } = await getStoredState();
-  const backendUrl = String(sscBackendUrl || '').trim();
+  // 1. Hardcode your local backend URL for testing
+  const backendUrl = 'http://localhost:8000/import-question/';
 
-  if (!backendUrl) {
-    return { sentToBackend: false, reason: 'backend_url_not_configured' };
+  // 2. IMPORTANT: Paste your active Supabase JWT token here
+  const SUPABASE_JWT_TOKEN = "eyJhbGciOiJFUzI1NiIsImtpZCI6IjVhNzczM2VhLTM3YWItNDAyNi04OTAwLWRjMjI3ZGYzNjEwYiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL3JxbmJpb2ZqZ3RhaWRwZmlncHdpLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI2ZTQ1YjI0Zi1lNGZlLTQxM2ItOGY0Yi1mZWVhYzI2NDgzYzEiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzcxNDkzNjc2LCJpYXQiOjE3NzE0OTAwNzYsImVtYWlsIjoiZ2FuZXNoLnNodWtsYTE3QGdtYWlsLmNvbSIsInBob25lIjoiIiwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiZW1haWwiLCJwcm92aWRlcnMiOlsiZW1haWwiXX0sInVzZXJfbWV0YWRhdGEiOnsiZW1haWwiOiJnYW5lc2guc2h1a2xhMTdAZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsInBob25lX3ZlcmlmaWVkIjpmYWxzZSwic3ViIjoiNmU0NWIyNGYtZTRmZS00MTNiLThmNGItZmVlYWMyNjQ4M2MxIn0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoicGFzc3dvcmQiLCJ0aW1lc3RhbXAiOjE3NzE0NzkzMDZ9XSwic2Vzc2lvbl9pZCI6IjQ2MGVlYTlkLTA1YzMtNDVlOC04NWY0LTJjMTQzYzIyNDg2MCIsImlzX2Fub255bW91cyI6ZmFsc2V9.u0NR7vXGQXaBY14CtivL55yTFKl83QjN-mB7XNeofcuoFAvlzJi3EB_12obX11qNVNz2SDvCQRz2V19QOfxqFA";
+
+  // 3. Reformat the payload to match what main.py expects
+  const labels = ["A", "B", "C", "D", "E", "F"];
+  const formattedOptions = (capture.options || []).map((optText, index) => ({
+    label: labels[index] || String(index + 1),
+    text: optText
+  }));
+
+  // Inject the Subject and Sub-topic as a header to help the AI categorize
+  let contextHeader = "";
+  if (capture.subject && capture.subject !== "Unknown") contextHeader += `[Section: ${capture.subject}] `;
+  if (capture.subTopic) contextHeader += `[Sub-topic: ${capture.subTopic}]`;
+
+  const finalQuestionText = contextHeader.trim()
+      ? `${contextHeader.trim()}\n\n${capture.questionText || ''}`
+      : (capture.questionText || '');
+
+  const backendPayload = {
+    question_text: finalQuestionText,
+    options: formattedOptions,
+    correct_option: capture.correctAnswer || "Unknown",
+    source: "ssc-smart-tracker-extension",
+    has_visual_elements: capture.screenshotProvided || false
+  };
+
+  console.log("🚀 SENDING THIS TO BACKEND:", JSON.stringify(backendPayload, null, 2));
+
+  try {
+    const response = await fetch(backendUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_JWT_TOKEN}`
+      },
+      body: JSON.stringify(backendPayload)
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Backend error ${response.status}: ${text.slice(0, 200)}`);
+    }
+
+    return { sentToBackend: true };
+  } catch (error) {
+    console.error("❌ Fetch failed:", error);
+    throw error;
   }
-
-  const response = await fetch(backendUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(sscBackendToken ? { Authorization: `Bearer ${sscBackendToken}` } : {})
-    },
-    body: JSON.stringify(capture)
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Backend error ${response.status}: ${text.slice(0, 200)}`);
-  }
-
-  return { sentToBackend: true };
 }
 
 async function captureVisibleScreenshot(sender) {

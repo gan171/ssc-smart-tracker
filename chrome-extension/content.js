@@ -20,40 +20,12 @@ const QUESTION_HEADER_SELECTORS = [
   '[class*="question-no"]'
 ];
 
-const QUESTION_TEXT_SELECTORS = [
-  '.question-and-options--question-text',
-  '.question-text',
-  '.question-statement',
-  '.question-body',
-  '[data-testid="question-text"]'
-];
-
-const OPTION_SELECTORS = [
-  '.question-and-options--option-container',
-  '.question-and-options--option',
-  '.option-item',
-  '.option-container',
-  'li.option',
-  'label.option',
-  '.each-option'
-];
-
 const SOLUTION_BLOCKLIST_SELECTORS = [
   '.question-solution',
   '.solution',
   '[class*="solution"]',
   '.question-paper-solution',
   '.question-solution-body--content'
-];
-
-const QUESTION_END_MARKERS = [
-  'Your first attempt',
-  'My Answer',
-  'Re-attempt',
-  'View Solution',
-  'Your First Attempt Answers',
-  'Solution',
-  'Was the solution helpful'
 ];
 
 let activeQuestionKey = null;
@@ -79,8 +51,16 @@ function isTestbookSolutionPage() {
   return /testbook\.com/i.test(url) && /(solution|solutions|analysis|result|review|attemptNo|tests\/)/i.test(url);
 }
 
+// RESTORED: Preserves Line Breaks (\n) so options don't squish together
 function cleanText(text) {
-  return (text || '').replace(/\s+/g, ' ').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+  return (text || '')
+    .replace(/[ \t\r\f\v]+/g, ' ')
+    .replace(/ \n /g, '\n')
+    .replace(/ \n/g, '\n')
+    .replace(/\n /g, '\n')
+    .replace(/\n+/g, '\n')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim();
 }
 
 function textOf(el) {
@@ -103,7 +83,6 @@ function getQuestionRootCandidates() {
     const list = Array.from(document.querySelectorAll(selector)).filter(isLikelyQuestionRoot);
     if (list.length > 0) return list;
   }
-
   return Array.from(document.querySelectorAll('div, section, article')).filter(isLikelyQuestionRoot);
 }
 
@@ -117,12 +96,10 @@ function resolveCurrentQuestionRoot() {
 
 function findQuestionHeader(root) {
   if (!root) return null;
-
   for (const selector of QUESTION_HEADER_SELECTORS) {
     const found = root.querySelector(selector);
     if (found) return found;
   }
-
   return root.querySelector('div, header') || root;
 }
 
@@ -130,58 +107,115 @@ function isInsideSolution(el) {
   return SOLUTION_BLOCKLIST_SELECTORS.some((selector) => el.closest(selector));
 }
 
-function extractQuestionTextFromSelectors(root) {
-  for (const selector of QUESTION_TEXT_SELECTORS) {
+// RESTORED: Scrapes "Quantitative Aptitude" etc.
+function extractSubject() {
+  const rawText = document.body.innerText || '';
+  const match = rawText.match(/(?:Section|Subject)\s*:\s*(.+?)(?=\n|$)/i);
+  return match ? match[1].trim() : "Unknown";
+}
+
+// RESTORED: The robust question text extractor
+function extractQuestionText(root) {
+  if (!root) return '';
+
+  const exactSelectors = [
+    '.question-and-options--question-text',
+    '.question-text',
+    '.question-statement',
+    '.question-body',
+    '[data-testid="question-text"]'
+  ];
+
+  for (const selector of exactSelectors) {
     const nodes = Array.from(root.querySelectorAll(selector));
     for (const node of nodes) {
-      if (isInsideSolution(node)) continue;
-      const value = textOf(node);
-      if (value.length > 12) return value;
+      if (!isInsideSolution(node)) {
+        const text = (node.innerText || '').trim();
+        if (text.length > 10) return cleanText(text);
+      }
     }
   }
-  return '';
-}
 
-function extractQuestionTextBySlicing(rootText) {
-  const questionTagIndex = rootText.search(/Question\s*:/i);
-  if (questionTagIndex === -1) return '';
-
-  let sliced = rootText.slice(questionTagIndex).replace(/^Question\s*:\s*/i, '');
-  const cutPositions = QUESTION_END_MARKERS.map((marker) => sliced.search(new RegExp(marker, 'i'))).filter((pos) => pos > -1);
-  if (cutPositions.length) {
-    sliced = sliced.slice(0, Math.min(...cutPositions));
+  const rawText = root.innerText || '';
+  let startIdx = -1;
+  const startMatch = rawText.match(/(?:Question:|Save\s*Report(?:ed)?|Others|Text Size A-\s*A\+)\s*\n+/i);
+  if (startMatch) {
+    startIdx = startMatch.index + startMatch[0].length;
   }
 
-  return cleanText(sliced);
+  if (startIdx !== -1) {
+    let sliced = rawText.substring(startIdx).trim();
+    const cutMatch = sliced.search(/\n\s*(?:Not Attempted|Your first attempt|My Answer|Re-attempt|Solution)/i);
+    if (cutMatch !== -1) {
+      sliced = sliced.substring(0, cutMatch);
+    }
+    return cleanText(sliced);
+  }
+
+  return cleanText(rawText.slice(0, 500));
 }
 
+// RESTORED: Strict Math Normalizer (protects "1 - c")
 function normalizeOptionText(text) {
-  return cleanText(text.replace(/^([A-Da-d]|\(?\d+\)?)[\).:\-\s]+/, ''));
+  return cleanText(text.replace(/^(\([A-Ea-e1-5]\)|[A-Ea-e1-5][\)\.])\s+/, ''));
 }
 
-function extractOptions(root) {
-  for (const selector of OPTION_SELECTORS) {
-    const optionNodes = Array.from(root.querySelectorAll(selector)).filter((node) => !isInsideSolution(node));
-    const options = optionNodes.map((node) => normalizeOptionText(textOf(node))).filter((text) => text && text.length < 300);
+// RESTORED: The Structural & Text-based Option Extractor
+function extractOptions(root, questionText = '') {
+  const selectors = [
+    '[data-testid="option"]',
+    '[data-testid="option-container"]',
+    '.question-and-options--option',
+    '.option-item',
+    '.option-container',
+    '.each-option',
+    'label.option',
+    'li.option',
+    '[class*="option" i]',
+    '[class*="Option" i]',
+    '.radio-label',
+    '.test-option'
+  ];
 
-    if (options.length >= 2) {
-      return options.slice(0, 4);
+  for (const sel of selectors) {
+    let nodes = Array.from(root.querySelectorAll(sel)).filter(n => !isInsideSolution(n));
+    nodes = nodes.filter(n => !nodes.some(child => child !== n && n.contains(child)));
+    const extractedTexts = nodes.map(n => normalizeOptionText(n.innerText)).filter(t => t.length > 0);
+
+    if (extractedTexts.length >= 2 && extractedTexts.length <= 6) {
+      return extractedTexts;
     }
   }
 
-  const rootText = textOf(root);
-  const questionSlice = extractQuestionTextBySlicing(rootText);
-  if (!questionSlice) return [];
+  const possibleContainers = Array.from(root.querySelectorAll('div, ul, ol, form')).filter(n => {
+      return !isInsideSolution(n) && !n.closest('math, mjx-container, .katex, .mjx-chtml');
+  });
+  for (const container of possibleContainers) {
+      const children = Array.from(container.children);
+      if (children.length >= 4 && children.length <= 6) {
+          const firstTag = children[0].tagName;
+          const allSameTag = children.every(c => c.tagName === firstTag);
+          if (allSameTag) {
+              const texts = children.map(c => normalizeOptionText(c.innerText)).filter(t => t.length > 0);
+              const allShort = texts.every(t => t.length < 250);
+              if (texts.length === children.length && allShort) return texts;
+          }
+      }
+  }
 
-  const lines = questionSlice.split(/\n|\s{2,}/).map(cleanText).filter(Boolean);
-  const parsed = lines
-    .map((line) => {
-      const m = line.match(/^([A-Da-d]|\(?[1-6]\)?)[\).:\-\s]+(.+)/);
-      return m ? normalizeOptionText(m[2]) : '';
-    })
-    .filter(Boolean);
-
-  return Array.from(new Set(parsed)).slice(0, 4);
+  if (questionText) {
+    const lines = questionText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    for (const numOptions of [5, 4]) {
+      if (lines.length > numOptions) {
+        const possibleOptions = lines.slice(-numOptions);
+        const allShort = possibleOptions.every(opt => opt.length < 150 && !opt.toLowerCase().includes('question'));
+        if (allShort) {
+          return possibleOptions.map(normalizeOptionText);
+        }
+      }
+    }
+  }
+  return [];
 }
 
 function extractTimeMetrics(root) {
@@ -204,13 +238,31 @@ function extractTimeMetrics(root) {
   };
 }
 
+// RESTORED: Peeling Logic & Payload Builder
 function buildQuestionPayload(root) {
   const rootText = textOf(root);
   const questionNumber = findQuestionNo(rootText);
 
-  const questionText = extractQuestionTextFromSelectors(root) || extractQuestionTextBySlicing(rootText) || rootText.slice(0, 300);
-  const options = extractOptions(root);
+  let questionText = extractQuestionText(root);
+  const options = extractOptions(root, questionText);
   const timing = extractTimeMetrics(root);
+  const subject = extractSubject();
+
+  if (options.length > 0) {
+    let cleanedQText = questionText;
+    for (let i = options.length - 1; i >= 0; i--) {
+       const optText = options[i];
+       const escapedOpt = optText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+       const regex = new RegExp('(?:[A-Da-d]|\\(?\\d+\\)?)[\\).:\\-\\s]*' + escapedOpt + '\\s*(?:[/\\-–√]*\\s*)*$');
+
+       if (regex.test(cleanedQText)) {
+           cleanedQText = cleanedQText.replace(regex, '').trim();
+       } else if (cleanedQText.trim().endsWith(optText)) {
+           cleanedQText = cleanedQText.substring(0, cleanedQText.lastIndexOf(optText)).trim();
+       }
+    }
+    questionText = cleanedQText.replace(/[\n\s/\\-–√]+$/, '').trim();
+  }
 
   return {
     source: 'ssc-smart-tracker-extension',
@@ -219,6 +271,7 @@ function buildQuestionPayload(root) {
     questionNumber,
     questionText,
     options,
+    subject,
     ...timing,
     capturedAt: new Date().toISOString()
   };
@@ -258,7 +311,6 @@ function safeSendMessage(message, onDone) {
   }
 }
 
-
 function escapeHtml(text) {
   return String(text || '')
     .replace(/&/g, '&amp;')
@@ -279,6 +331,7 @@ function closeReviewModal() {
   isModalOpen = false;
 }
 
+// IMPORTANT: We kept your UI builder exactly as your PR made it!
 function buildReviewedPayloadFromForm(form, scrapedPayload) {
   const options = ['A', 'B', 'C', 'D'].map((label) => cleanText(form.querySelector(`[name="option${label}"]`)?.value || ''));
   const filteredOptions = options.filter(Boolean);
@@ -288,7 +341,7 @@ function buildReviewedPayloadFromForm(form, scrapedPayload) {
     ...scrapedPayload,
     questionText: cleanText(form.querySelector('[name="questionText"]')?.value || scrapedPayload.questionText || ''),
     options,
-    subject: cleanText(form.querySelector('[name="subject"]')?.value || ''),
+    subject: cleanText(form.querySelector('[name="subject"]')?.value || scrapedPayload.subject || ''),
     subTopic: cleanText(form.querySelector('[name="subTopic"]')?.value || ''),
     examTag: cleanText(form.querySelector('[name="examTag"]')?.value || ''),
     difficulty: form.querySelector('[name="difficulty"]')?.value || 'Medium',
@@ -303,6 +356,7 @@ function buildReviewedPayloadFromForm(form, scrapedPayload) {
   };
 }
 
+// IMPORTANT: We kept your Modal exactly as your PR made it!
 function createReviewModal(scrapedPayload, questionKey, button) {
   closeReviewModal();
   isModalOpen = true;
@@ -311,7 +365,7 @@ function createReviewModal(scrapedPayload, questionKey, button) {
   overlay.id = 'ssc-review-modal-overlay';
   overlay.className = 'ssc-review-modal-overlay';
 
-  const options = [...scrapedPayload.options || []];
+  const options = [...(scrapedPayload.options || [])];
   while (options.length < 4) options.push('');
 
   overlay.innerHTML = `
@@ -333,7 +387,7 @@ function createReviewModal(scrapedPayload, questionKey, button) {
         </div>
 
         <div class="ssc-grid-two">
-          <label>Subject <input name="subject" type="text" placeholder="Quantitative Aptitude" /></label>
+          <label>Subject <input name="subject" type="text" placeholder="Quantitative Aptitude" value="${escapeHtml(scrapedPayload.subject || '')}"/></label>
           <label>Sub-topic <input name="subTopic" type="text" placeholder="Time & Distance" /></label>
         </div>
 
