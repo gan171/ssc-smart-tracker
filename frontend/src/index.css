@@ -155,3 +155,6 @@ body {
 .hover-grow:hover {
   transform: scale(1.05);
 }
+.premium-btn {
+  @apply rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/70 px-4 py-3 font-semibold text-gray-700 dark:text-gray-200 inline-flex items-center justify-center gap-2 hover:shadow-md hover:-translate-y-0.5 transition;
+}

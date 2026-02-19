@@ -16,6 +16,7 @@ import BulkUploadModal from './components/BulkUploadModal'
 import AnalysisModal from './components/AnalysisModal'
 import ExportModal from './components/ExportModal'
 import TopNav from './components/TopNav'
+import MockSummaryModal from './components/MockSummaryModal'
 
 import { Loader2 } from 'lucide-react'
 
@@ -23,15 +24,14 @@ function App() {
   const { user, signOut, loading: authLoading } = useAuth()
 
   // Custom hooks
-  const { mistakes, loading: questionsLoading, refetch, addNote, updateStatus } = useQuestions(user)
+  const { mistakes, loading: questionsLoading, refetch, addNote } = useQuestions(user)
   const {
     loading: uploadLoading,
     error: uploadError,
     analysis,
     uploadSingle,
     uploadBulk,
-    clearAnalysis,
-    clearError
+    clearAnalysis
   } = useUpload(refetch)
 
   // View States
@@ -43,16 +43,17 @@ function App() {
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
+  const [showMockSummary, setShowMockSummary] = useState(false)
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 })
   const [selectedQuestion, setSelectedQuestion] = useState(null)
+  const [lastMockSummary, setLastMockSummary] = useState(null)
 
-  // Theme - FIXED
+  // Theme
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme')
     return saved === 'dark'
   })
 
-  // Theme Effect - FIXED
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark')
@@ -63,7 +64,6 @@ function App() {
     }
   }, [darkMode])
 
-  // Handlers
   const handleUpload = async (file) => {
     await uploadSingle(file)
     setShowUploadModal(false)
@@ -75,7 +75,6 @@ function App() {
   }
 
   const handleQuestionClick = (question) => {
-    // FIXED: Properly set the selected question for analysis modal
     setSelectedQuestion(question)
   }
 
@@ -92,10 +91,37 @@ function App() {
   }
 
   const handleMockTestComplete = async (answers) => {
-    // TODO: Save results to backend
+    const questions = mockTestConfig?.questions || []
+    const answered = Object.keys(answers).length
+    const correct = questions.filter((q) => answers[q.id] === q.correct_option).length
+    const score = questions.length > 0 ? (correct / questions.length) * 100 : 0
+
+    const weakSubjects = questions.reduce((acc, q) => {
+      const subject = q.subject || 'General'
+      if (answers[q.id] && answers[q.id] !== q.correct_option) {
+        acc[subject] = (acc[subject] || 0) + 1
+      }
+      return acc
+    }, {})
+
+    const focusTopics = Object.entries(weakSubjects)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+
+    setLastMockSummary({
+      total: questions.length,
+      answered,
+      correct,
+      incorrect: Math.max(answered - correct, 0),
+      skipped: Math.max(questions.length - answered, 0),
+      score: Math.round(score * 10) / 10,
+      focusTopics
+    })
+
     refetch()
     setCurrentView('dashboard')
     setMockTestConfig(null)
+    setShowMockSummary(true)
   }
 
   const handleMockTestExit = () => {
@@ -111,7 +137,6 @@ function App() {
     setCurrentView('dashboard')
   }
 
-  // Loading
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
@@ -120,7 +145,6 @@ function App() {
     )
   }
 
-  // Not logged in
   if (!user) {
     return showLanding ? (
       <LandingPage onGetStarted={() => setShowLanding(false)} />
@@ -129,7 +153,6 @@ function App() {
     )
   }
 
-  // Mock Test Views
   if (currentView === 'mockSetup') {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-8 px-4">
@@ -153,9 +176,8 @@ function App() {
     )
   }
 
-  // Main Dashboard
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-blue-50/30 dark:from-gray-950 dark:via-gray-950 dark:to-gray-900">
       <TopNav
         user={user}
         darkMode={darkMode}
@@ -165,6 +187,7 @@ function App() {
 
       <Dashboard
         mistakes={mistakes}
+        loading={questionsLoading}
         onUploadClick={() => setShowUploadModal(true)}
         onBulkUploadClick={() => setShowBulkModal(true)}
         onMockTestClick={handleMockTest}
@@ -174,7 +197,6 @@ function App() {
         darkMode={darkMode}
       />
 
-      {/* Modals */}
       <UploadModal
         isOpen={showUploadModal}
         onClose={() => setShowUploadModal(false)}
@@ -191,7 +213,6 @@ function App() {
         progress={bulkProgress}
       />
 
-      {/* Analysis Modal - shows either new upload or clicked question */}
       <AnalysisModal
         isOpen={!!(analysis || selectedQuestion)}
         analysis={analysis || (selectedQuestion?.content)}
@@ -203,6 +224,13 @@ function App() {
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         mistakes={mistakes}
+      />
+
+      <MockSummaryModal
+        isOpen={showMockSummary}
+        summary={lastMockSummary}
+        onClose={() => setShowMockSummary(false)}
+        onStartNextMock={handleMockTest}
       />
     </div>
   )
