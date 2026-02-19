@@ -1,51 +1,27 @@
 {
   "manifest_version": 3,
-  "name": "SSC Smart Tracker - Testbook Helper",
+  "name": "SSC Smart Tracker",
+  "description": "Adds an 'Add to Tracker' button on Testbook result/review pages and sends page data to SSC Smart Tracker.",
   "version": "1.0.0",
-  "description": "One-click import questions from Testbook to your SSC Tracker",
-  "permissions": [
-    "activeTab",
-    "storage",
-    "scripting"
-  ],
+  "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": [
-    "*://*.testbook.com/*",
-    "http://127.0.0.1:8000/*"
-  ],
-  "content_scripts": [
-    {
-      "matches": [
-        "*://*.testbook.com/*"
-      ],
-      "js": [
-        "content.js"
-      ],
-      "css": [
-        "styles.css"
-      ],
-      "run_at": "document_idle"
-    }
+    "https://*.testbook.com/*",
+    "http://localhost:5173/*",
+    "http://localhost:3000/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
     "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
+    "default_title": "SSC Smart Tracker"
   },
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
-  "web_accessible_resources": [
+  "content_scripts": [
     {
-      "resources": ["icons/*"],
-      "matches": ["*://*.testbook.com/*"]
+      "matches": ["https://*.testbook.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
     }
   ]
 }
