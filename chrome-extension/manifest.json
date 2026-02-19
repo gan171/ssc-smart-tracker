@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "SSC Smart Tracker",
+  "description": "Adds an 'Add to Tracker' button on Testbook result/review pages and sends page data to SSC Smart Tracker.",
+  "version": "1.0.0",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:8000/*",
+    "http://localhost:3000/*",
+    "http://localhost:5173/*",
+    "http://localhost:8000/*",
+    "https://*.testbook.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SSC Smart Tracker"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.testbook.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "styles.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

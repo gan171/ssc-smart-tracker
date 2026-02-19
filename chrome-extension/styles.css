@@ -90,3 +90,128 @@
 .ssc-tracker-button {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
 }
+/* Per-question button tuning for Testbook solution header */
+.ssc-question-track-btn {
+  margin-left: 12px;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+/* Review modal */
+.ssc-review-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 1000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.ssc-review-modal {
+  width: min(860px, 96vw);
+  max-height: 90vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.35);
+  padding: 16px;
+}
+
+.ssc-review-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.ssc-modal-close {
+  border: none;
+  background: #efefef;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 6px 10px;
+}
+
+.ssc-review-form textarea,
+.ssc-review-form input,
+.ssc-review-form select {
+  width: 100%;
+  margin-top: 6px;
+  margin-bottom: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.ssc-grid-two {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.ssc-meta-row,
+.ssc-checks,
+.ssc-correct-answer,
+.ssc-screenshot-row,
+.ssc-modal-actions {
+  margin: 10px 0;
+}
+
+.ssc-correct-answer {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.ssc-correct-answer label,
+.ssc-checks label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ssc-correct-answer input,
+.ssc-checks input {
+  width: auto;
+  margin: 0;
+}
+
+.ssc-screenshot-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ssc-primary-btn,
+.ssc-secondary-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ssc-primary-btn {
+  background: #2563eb;
+  color: #fff;
+}
+
+.ssc-secondary-btn {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.ssc-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
