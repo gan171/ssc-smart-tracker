@@ -5,7 +5,6 @@ import {
   Sparkles, Zap, BookOpen, FileText, Edit3, Save,
   Brain, Download, Radar, Trophy
 } from 'lucide-react'
-import { motion } from 'framer-motion'
 import ReviewQueue from './components/ReviewQueue'
 import AnalyticsDashboard from './components/AnalyticsDashboard'
 
@@ -19,7 +18,7 @@ function Dashboard({
   onAddNote,
   onExportClick
 }) {
-  const [activeTab, setActiveTab] = useState('recent') // recent, bank, review, analytics
+  const [activeTab, setActiveTab] = useState('recent')
   const [editingNote, setEditingNote] = useState(null)
   const [noteText, setNoteText] = useState('')
   const [bankFilter, setBankFilter] = useState('All')
@@ -118,19 +117,69 @@ function Dashboard({
     return acc
   }, {})
 
-  const recentUploads = mistakes.slice(0, 5)
+    const xp = Math.round(correctAttempts * 8 + totalQuestions * 3 + streak * 10)
+
+    const dueToday = mistakes.filter((m) => {
+      if (!m.next_review_date) return false
+      return new Date(m.next_review_date).toDateString() === today.toDateString()
+    }).length
+
+    const overdue = mistakes.filter((m) => {
+      if (!m.next_review_date) return false
+      return new Date(m.next_review_date) < today
+    }).length
+
+    const weakTopics = Object.entries(
+      mistakes.reduce((acc, q) => {
+        const key = q.topic || q.subject || 'General'
+        const attempts = q.times_attempted || 0
+        const correct = q.times_correct || 0
+        const misses = Math.max(attempts - correct, 0)
+        if (misses > 0) acc[key] = (acc[key] || 0) + misses
+        return acc
+      }, {})
+    ).sort((a, b) => b[1] - a[1]).slice(0, 5)
+
+    return {
+      totalQuestions,
+      accuracy,
+      streak,
+      xp,
+      dueToday,
+      overdue,
+      weakTopics,
+      todayMission: Math.max(10, Math.min(35, dueToday + 10))
+    }
+  }, [mistakes])
+
+  useEffect(() => {
+    const target = {
+      total: stats.totalQuestions,
+      accuracy: Math.round(stats.accuracy),
+      streak: stats.streak,
+      xp: stats.xp
+    }
+    let frame
+    const start = performance.now()
+    const duration = 700
+
+    const tick = (now) => {
+      const p = Math.min((now - start) / duration, 1)
+      const ease = 1 - Math.pow(1 - p, 3)
+      setCounter({
+        total: Math.round(target.total * ease),
+        accuracy: Math.round(target.accuracy * ease),
+        streak: Math.round(target.streak * ease),
+        xp: Math.round(target.xp * ease)
+      })
+      if (p < 1) frame = requestAnimationFrame(tick)
+    }
 
   const filteredBank = bankFilter === 'All'
     ? mistakes
     : mistakes.filter((m) => m.subject === bankFilter)
 
-  const handleSaveNote = async (questionId) => {
-    if (onAddNote) {
-      await onAddNote(questionId, noteText)
-    }
-    setEditingNote(null)
-    setNoteText('')
-  }
+  const recent = mistakes.slice(0, 8)
 
   const handleStartEditNote = (question) => {
     setEditingNote(question.id)
@@ -174,39 +223,22 @@ function Dashboard({
           </div>
         </div>
 
-        {q.has_visual_elements && (
-          <div className="px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 text-xs rounded flex-shrink-0">
-            Visual
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-28 md:pb-8">
+      {isMilestone && (
+          <div className="mb-4 rounded-2xl p-4 bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg animate-pulse-slow">
+            <div className="flex items-center gap-2 font-semibold"><Sparkles size={16} /> Streak Milestone Unlocked</div>
+            <div className="text-sm text-amber-100">{stats.streak}-day streak! You are building unstoppable exam momentum.</div>
           </div>
         )}
-      </div>
 
       {q.manual_notes || editingNote === q.id ? (
         <div className="mt-2 ml-14 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
           {editingNote === q.id ? (
             <div>
-              <textarea
-                value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
-                className="w-full p-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200"
-                rows={3}
-                placeholder="Add your notes..."
-              />
-              <div className="flex gap-2 mt-2">
-                <button
-                  onClick={() => handleSaveNote(q.id)}
-                  className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded flex items-center gap-1"
-                >
-                  <Save size={14} />
-                  Save
-                </button>
-                <button
-                  onClick={() => setEditingNote(null)}
-                  className="px-3 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm rounded"
-                >
-                  Cancel
-                </button>
-              </div>
+              <div className="text-xs uppercase tracking-wide text-blue-600 dark:text-blue-300 font-semibold">Daily Mission</div>
+              <h2 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-white">Crack {stats.todayMission} revision points today</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{stats.dueToday} due today · {stats.overdue} overdue · ~{Math.ceil(stats.todayMission * 1.8)} min</p>
             </div>
           ) : (
             <div className="flex items-start gap-2">
