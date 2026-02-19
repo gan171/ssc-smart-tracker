@@ -20,6 +20,24 @@ const QUESTION_HEADER_SELECTORS = [
   '[class*="question-no"]'
 ];
 
+const QUESTION_TEXT_SELECTORS = [
+  '.question-and-options--question-text',
+  '.question-text',
+  '.question-statement',
+  '.question-body',
+  '[data-testid="question-text"]'
+];
+
+const OPTION_SELECTORS = [
+  '.question-and-options--option-container',
+  '.question-and-options--option',
+  '.option-item',
+  '.option-container',
+  'li.option',
+  'label.option',
+  '.each-option'
+];
+
 const SOLUTION_BLOCKLIST_SELECTORS = [
   '.question-solution',
   '.solution',
@@ -28,7 +46,18 @@ const SOLUTION_BLOCKLIST_SELECTORS = [
   '.question-solution-body--content'
 ];
 
+const QUESTION_END_MARKERS = [
+  'Your first attempt',
+  'My Answer',
+  'Re-attempt',
+  'View Solution',
+  'Your First Attempt Answers',
+  'Solution',
+  'Was the solution helpful'
+];
+
 let activeQuestionKey = null;
+let isModalOpen = false;
 
 function showNotification(text, type = 'info') {
   const existing = document.querySelector('.ssc-notification');
@@ -42,7 +71,7 @@ function showNotification(text, type = 'info') {
   setTimeout(() => {
     node.style.opacity = '0';
     setTimeout(() => node.remove(), 350);
-  }, 2200);
+  }, 2400);
 }
 
 function isTestbookSolutionPage() {
@@ -50,16 +79,8 @@ function isTestbookSolutionPage() {
   return /testbook\.com/i.test(url) && /(solution|solutions|analysis|result|review|attemptNo|tests\/)/i.test(url);
 }
 
-// Preserves Line Breaks (\n) so options don't squish together
 function cleanText(text) {
-  return (text || '')
-    .replace(/[ \t\r\f\v]+/g, ' ') // Collapse horizontal spaces
-    .replace(/ \n /g, '\n')        // Clean spaces around newlines
-    .replace(/ \n/g, '\n')
-    .replace(/\n /g, '\n')
-    .replace(/\n+/g, '\n')         // Collapse multiple newlines into one
-    .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove invisible characters
-    .trim();
+  return (text || '').replace(/\s+/g, ' ').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
 }
 
 function textOf(el) {
@@ -82,6 +103,7 @@ function getQuestionRootCandidates() {
     const list = Array.from(document.querySelectorAll(selector)).filter(isLikelyQuestionRoot);
     if (list.length > 0) return list;
   }
+
   return Array.from(document.querySelectorAll('div, section, article')).filter(isLikelyQuestionRoot);
 }
 
@@ -95,10 +117,12 @@ function resolveCurrentQuestionRoot() {
 
 function findQuestionHeader(root) {
   if (!root) return null;
+
   for (const selector of QUESTION_HEADER_SELECTORS) {
     const found = root.querySelector(selector);
     if (found) return found;
   }
+
   return root.querySelector('div, header') || root;
 }
 
@@ -106,127 +130,58 @@ function isInsideSolution(el) {
   return SOLUTION_BLOCKLIST_SELECTORS.some((selector) => el.closest(selector));
 }
 
-function extractQuestionText(root) {
-  if (!root) return '';
-
-  const exactSelectors = [
-    '.question-and-options--question-text',
-    '.question-text',
-    '.question-statement',
-    '.question-body',
-    '[data-testid="question-text"]'
-  ];
-
-  for (const selector of exactSelectors) {
+function extractQuestionTextFromSelectors(root) {
+  for (const selector of QUESTION_TEXT_SELECTORS) {
     const nodes = Array.from(root.querySelectorAll(selector));
     for (const node of nodes) {
-      if (!isInsideSolution(node)) {
-        const text = (node.innerText || '').trim();
-        if (text.length > 10) return cleanText(text);
-      }
+      if (isInsideSolution(node)) continue;
+      const value = textOf(node);
+      if (value.length > 12) return value;
     }
   }
+  return '';
+}
 
-  const rawText = root.innerText || '';
-  let startIdx = -1;
-  const startMatch = rawText.match(/(?:Question:|Save\s*Report(?:ed)?|Others|Text Size A-\s*A\+)\s*\n+/i);
-  if (startMatch) {
-    startIdx = startMatch.index + startMatch[0].length;
+function extractQuestionTextBySlicing(rootText) {
+  const questionTagIndex = rootText.search(/Question\s*:/i);
+  if (questionTagIndex === -1) return '';
+
+  let sliced = rootText.slice(questionTagIndex).replace(/^Question\s*:\s*/i, '');
+  const cutPositions = QUESTION_END_MARKERS.map((marker) => sliced.search(new RegExp(marker, 'i'))).filter((pos) => pos > -1);
+  if (cutPositions.length) {
+    sliced = sliced.slice(0, Math.min(...cutPositions));
   }
 
-  if (startIdx !== -1) {
-    let sliced = rawText.substring(startIdx).trim();
-    const cutMatch = sliced.search(/\n\s*(?:Not Attempted|Your first attempt|My Answer|Re-attempt|Solution)/i);
-    if (cutMatch !== -1) {
-      sliced = sliced.substring(0, cutMatch);
-    }
-    return cleanText(sliced);
-  }
-
-  return cleanText(rawText.slice(0, 500));
+  return cleanText(sliced);
 }
 
 function normalizeOptionText(text) {
-  // Strictly matches "1)", "1.", "(1)", "A)", "A.", "(A)" followed by space.
-  // Prevents destroying math formulas like "1 - c" or "1 + c"
-  return cleanText(text.replace(/^(\([A-Ea-e1-5]\)|[A-Ea-e1-5][\)\.])\s+/, ''));
+  return cleanText(text.replace(/^([A-Da-d]|\(?\d+\)?)[\).:\-\s]+/, ''));
 }
-function extractSubject() {
-  const rawText = document.body.innerText || '';
-  // Looks for "Section: Quantitative Aptitude" or similar headers
-  const match = rawText.match(/(?:Section|Subject)\s*:\s*(.+?)(?=\n|$)/i);
-  return match ? match[1].trim() : "Unknown";
-}
-// Sibling structural search + text-based fallback
-function extractOptions(root, questionText = '') {
-  const selectors = [
-    '[data-testid="option"]',
-    '[data-testid="option-container"]',
-    '.question-and-options--option',
-    '.option-item',
-    '.option-container',
-    '.each-option',
-    'label.option',
-    'li.option',
-    '[class*="option" i]',
-    '[class*="Option" i]',
-    '.radio-label',
-    '.test-option'
-  ];
 
-  for (const sel of selectors) {
-    let nodes = Array.from(root.querySelectorAll(sel)).filter(n => !isInsideSolution(n));
-    // Filter out wrappers that hold other options inside them
-    nodes = nodes.filter(n => !nodes.some(child => child !== n && n.contains(child)));
-    const extractedTexts = nodes.map(n => normalizeOptionText(n.innerText)).filter(t => t.length > 0);
+function extractOptions(root) {
+  for (const selector of OPTION_SELECTORS) {
+    const optionNodes = Array.from(root.querySelectorAll(selector)).filter((node) => !isInsideSolution(node));
+    const options = optionNodes.map((node) => normalizeOptionText(textOf(node))).filter((text) => text && text.length < 300);
 
-    if (extractedTexts.length >= 2 && extractedTexts.length <= 6) {
-      return extractedTexts;
+    if (options.length >= 2) {
+      return options.slice(0, 4);
     }
   }
 
-  // STRUCTURAL FALLBACK: Look for 4 identical siblings
-  // NEW: Exclude MathJax, KaTeX, and math tags so it doesn't parse equations as options
-  const possibleContainers = Array.from(root.querySelectorAll('div, ul, ol, form')).filter(n => {
-      return !isInsideSolution(n) && !n.closest('math, mjx-container, .katex, .mjx-chtml');
-  });
+  const rootText = textOf(root);
+  const questionSlice = extractQuestionTextBySlicing(rootText);
+  if (!questionSlice) return [];
 
-  for (const container of possibleContainers) {
-      const children = Array.from(container.children);
-      if (children.length >= 4 && children.length <= 6) {
-          const firstTag = children[0].tagName;
-          const allSameTag = children.every(c => c.tagName === firstTag);
+  const lines = questionSlice.split(/\n|\s{2,}/).map(cleanText).filter(Boolean);
+  const parsed = lines
+    .map((line) => {
+      const m = line.match(/^([A-Da-d]|\(?[1-6]\)?)[\).:\-\s]+(.+)/);
+      return m ? normalizeOptionText(m[2]) : '';
+    })
+    .filter(Boolean);
 
-          if (allSameTag) {
-              const texts = children.map(c => normalizeOptionText(c.innerText)).filter(t => t.length > 0);
-              const allShort = texts.every(t => t.length < 250);
-              if (texts.length === children.length && allShort) {
-                  return texts;
-              }
-          }
-      }
-  }
-
-  // TEXT-BASED FALLBACK: If DOM is completely flat
-  if (questionText) {
-    const lines = questionText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
-    for (const numOptions of [5, 4]) {
-      if (lines.length > numOptions) {
-        const possibleOptions = lines.slice(-numOptions);
-        const allShort = possibleOptions.every(opt => opt.length < 150 && !opt.toLowerCase().includes('question'));
-
-        // FIX: Removed the "notAllTiny" restriction. We will trust the slicing math
-        // to grab the bottom 4 lines, even if they are single numbers like "5" or "1/4".
-
-        if (allShort) {
-          return possibleOptions.map(normalizeOptionText);
-        }
-      }
-    }
-  }
-
-  return [];
+  return Array.from(new Set(parsed)).slice(0, 4);
 }
 
 function extractTimeMetrics(root) {
@@ -253,31 +208,9 @@ function buildQuestionPayload(root) {
   const rootText = textOf(root);
   const questionNumber = findQuestionNo(rootText);
 
-  let questionText = extractQuestionText(root);
-  const options = extractOptions(root, questionText);
+  const questionText = extractQuestionTextFromSelectors(root) || extractQuestionTextBySlicing(rootText) || rootText.slice(0, 300);
+  const options = extractOptions(root);
   const timing = extractTimeMetrics(root);
-  const subject = extractSubject();
-
-  // If options were found, peel them off the bottom of the questionText
-  if (options.length > 0) {
-    let cleanedQText = questionText;
-    for (let i = options.length - 1; i >= 0; i--) {
-       const optText = options[i];
-
-       const escapedOpt = optText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-       // NEW: Added an optional group at the end to catch trailing math debris like "/" or "-"
-       const regex = new RegExp('(?:[A-Da-d]|\\(?\\d+\\)?)[\\).:\\-\\s]*' + escapedOpt + '\\s*(?:[/\\-–√]*\\s*)*$');
-
-       if (regex.test(cleanedQText)) {
-           cleanedQText = cleanedQText.replace(regex, '').trim();
-       } else if (cleanedQText.trim().endsWith(optText)) {
-           cleanedQText = cleanedQText.substring(0, cleanedQText.lastIndexOf(optText)).trim();
-       }
-    }
-
-    // NEW: Final sweep to delete stray math operators left dangling at the very bottom
-    questionText = cleanedQText.replace(/[\n\s/\\-–√]+$/, '').trim();
-  }
 
   return {
     source: 'ssc-smart-tracker-extension',
@@ -286,7 +219,6 @@ function buildQuestionPayload(root) {
     questionNumber,
     questionText,
     options,
-    subject,
     ...timing,
     capturedAt: new Date().toISOString()
   };
@@ -326,9 +258,216 @@ function safeSendMessage(message, onDone) {
   }
 }
 
+
+function escapeHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function setButtonLabel(button, text) {
   const label = button.querySelector('.ssc-button-text');
   if (label) label.textContent = text;
+}
+
+function closeReviewModal() {
+  const modal = document.getElementById('ssc-review-modal-overlay');
+  if (modal) modal.remove();
+  isModalOpen = false;
+}
+
+function buildReviewedPayloadFromForm(form, scrapedPayload) {
+  const options = ['A', 'B', 'C', 'D'].map((label) => cleanText(form.querySelector(`[name="option${label}"]`)?.value || ''));
+  const filteredOptions = options.filter(Boolean);
+  const correctAnswer = form.querySelector('input[name="correctAnswer"]:checked')?.value || '';
+
+  return {
+    ...scrapedPayload,
+    questionText: cleanText(form.querySelector('[name="questionText"]')?.value || scrapedPayload.questionText || ''),
+    options,
+    subject: cleanText(form.querySelector('[name="subject"]')?.value || ''),
+    subTopic: cleanText(form.querySelector('[name="subTopic"]')?.value || ''),
+    examTag: cleanText(form.querySelector('[name="examTag"]')?.value || ''),
+    difficulty: form.querySelector('[name="difficulty"]')?.value || 'Medium',
+    markedForReview: Boolean(form.querySelector('[name="markedForReview"]')?.checked),
+    fixLater: Boolean(form.querySelector('[name="fixLater"]')?.checked),
+    correctAnswer,
+    correctAnswerIndex: correctAnswer ? ['A', 'B', 'C', 'D'].indexOf(correctAnswer) : null,
+    screenshotDataUrl: form.querySelector('[name="screenshotDataUrl"]')?.value || '',
+    screenshotProvided: Boolean(form.querySelector('[name="screenshotDataUrl"]')?.value),
+    optionsCount: filteredOptions.length,
+    reviewedAt: new Date().toISOString()
+  };
+}
+
+function createReviewModal(scrapedPayload, questionKey, button) {
+  closeReviewModal();
+  isModalOpen = true;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'ssc-review-modal-overlay';
+  overlay.className = 'ssc-review-modal-overlay';
+
+  const options = [...scrapedPayload.options || []];
+  while (options.length < 4) options.push('');
+
+  overlay.innerHTML = `
+    <div class="ssc-review-modal" role="dialog" aria-modal="true">
+      <div class="ssc-review-modal-header">
+        <h3>Review & Edit Before Save</h3>
+        <button type="button" class="ssc-modal-close" aria-label="Close">✕</button>
+      </div>
+      <form class="ssc-review-form">
+        <label>Question Text
+          <textarea name="questionText" rows="5" required>${escapeHtml(scrapedPayload.questionText || '')}</textarea>
+        </label>
+
+        <div class="ssc-grid-two">
+          <label>Option A <input name="optionA" type="text" value="${escapeHtml(options[0] || '')}" /></label>
+          <label>Option B <input name="optionB" type="text" value="${escapeHtml(options[1] || '')}" /></label>
+          <label>Option C <input name="optionC" type="text" value="${escapeHtml(options[2] || '')}" /></label>
+          <label>Option D <input name="optionD" type="text" value="${escapeHtml(options[3] || '')}" /></label>
+        </div>
+
+        <div class="ssc-grid-two">
+          <label>Subject <input name="subject" type="text" placeholder="Quantitative Aptitude" /></label>
+          <label>Sub-topic <input name="subTopic" type="text" placeholder="Time & Distance" /></label>
+        </div>
+
+        <div class="ssc-grid-two">
+          <label>Exam Tag <input name="examTag" type="text" placeholder="SSC CGL Full Mock 1" value="${escapeHtml(scrapedPayload.title || '')}" /></label>
+          <label>Difficulty
+            <select name="difficulty">
+              <option>Easy</option>
+              <option selected>Medium</option>
+              <option>Hard</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="ssc-meta-row">
+          <span>Time: You ${scrapedPayload.userTimeTaken || '--:--'} | Avg ${scrapedPayload.avgTimeTaken || '--:--'}</span>
+          <span>Question #${scrapedPayload.questionNumber || '?'}</span>
+        </div>
+
+        <fieldset class="ssc-correct-answer">
+          <legend>Select Correct Answer</legend>
+          <label><input type="radio" name="correctAnswer" value="A" /> A</label>
+          <label><input type="radio" name="correctAnswer" value="B" /> B</label>
+          <label><input type="radio" name="correctAnswer" value="C" /> C</label>
+          <label><input type="radio" name="correctAnswer" value="D" /> D</label>
+        </fieldset>
+
+        <div class="ssc-checks">
+          <label><input type="checkbox" name="markedForReview" /> Marked for Review</label>
+          <label><input type="checkbox" name="fixLater" /> Fix Later</label>
+        </div>
+
+        <input type="hidden" name="screenshotDataUrl" value="" />
+        <div class="ssc-screenshot-row">
+          <button type="button" class="ssc-secondary-btn" data-action="capture">Capture Screenshot</button>
+          <input type="file" accept="image/*" data-action="upload" />
+          <span class="ssc-screenshot-status">No screenshot</span>
+        </div>
+
+        <div class="ssc-modal-actions">
+          <button type="button" class="ssc-secondary-btn" data-action="cancel">Cancel</button>
+          <button type="submit" class="ssc-primary-btn">Save</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const form = overlay.querySelector('.ssc-review-form');
+  const closeBtn = overlay.querySelector('.ssc-modal-close');
+  const cancelBtn = overlay.querySelector('[data-action="cancel"]');
+  const captureBtn = overlay.querySelector('[data-action="capture"]');
+  const uploadInput = overlay.querySelector('[data-action="upload"]');
+  const screenshotField = form.querySelector('[name="screenshotDataUrl"]');
+  const screenshotStatus = overlay.querySelector('.ssc-screenshot-status');
+
+  const onClose = () => {
+    closeReviewModal();
+    button.disabled = false;
+    button.classList.remove('ssc-button-success');
+    setButtonLabel(button, 'Add to Tracker');
+  };
+
+  closeBtn.addEventListener('click', onClose);
+  cancelBtn.addEventListener('click', onClose);
+
+  captureBtn.addEventListener('click', () => {
+    captureBtn.disabled = true;
+    captureBtn.textContent = 'Capturing...';
+
+    safeSendMessage({ type: 'SSC_TRACKER_CAPTURE_SCREENSHOT' }, (resp) => {
+      captureBtn.disabled = false;
+      captureBtn.textContent = 'Capture Screenshot';
+
+      if (!resp?.ok || !resp?.dataUrl) {
+        showNotification('Screenshot capture failed. You can upload manually.', 'error');
+        return;
+      }
+
+      screenshotField.value = resp.dataUrl;
+      screenshotStatus.textContent = 'Screenshot attached';
+      showNotification('Screenshot captured.', 'success');
+    });
+  });
+
+  uploadInput.addEventListener('change', () => {
+    const file = uploadInput.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      screenshotField.value = typeof reader.result === 'string' ? reader.result : '';
+      screenshotStatus.textContent = 'Uploaded image attached';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+
+    const reviewedPayload = buildReviewedPayloadFromForm(form, scrapedPayload);
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+
+    safeSendMessage(
+      {
+        type: 'SSC_TRACKER_SAVE_REVIEWED_QUESTION',
+        questionKey,
+        payload: reviewedPayload,
+        rawPayload: scrapedPayload
+      },
+      (response) => {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save';
+
+        if (!response?.ok) {
+          showNotification('Save failed. Check backend URL or try again.', 'error');
+          return;
+        }
+
+        closeReviewModal();
+        button.classList.add('ssc-button-success');
+        setButtonLabel(button, 'Added');
+
+        if (response.sentToBackend) {
+          showNotification('Saved to tracker backend.', 'success');
+        } else {
+          showNotification('Saved locally. Configure backend URL in storage to sync.', 'info');
+        }
+      }
+    );
+  });
 }
 
 function onQuestionButtonClick(button) {
@@ -342,27 +481,9 @@ function onQuestionButtonClick(button) {
   const questionKey = getQuestionKey(payload);
 
   button.disabled = true;
-  setButtonLabel(button, 'Saving...');
+  setButtonLabel(button, 'Reviewing...');
 
-  safeSendMessage(
-    {
-      type: 'SSC_TRACKER_CAPTURE_QUESTION',
-      questionKey,
-      payload
-    },
-    (response) => {
-      if (!response?.ok) {
-        button.disabled = false;
-        setButtonLabel(button, 'Add to Tracker');
-        showNotification('Could not save this question. Please refresh extension and try again.', 'error');
-        return;
-      }
-
-      button.classList.add('ssc-button-success');
-      setButtonLabel(button, 'Added');
-      showNotification(`Question ${payload.questionNumber || ''} saved.`, 'success');
-    }
-  );
+  createReviewModal(payload, questionKey, button);
 }
 
 function removeDuplicateButtons() {
@@ -375,6 +496,8 @@ function removeDuplicateButtons() {
 }
 
 function ensureSingleQuestionButton() {
+  if (isModalOpen) return;
+
   const root = resolveCurrentQuestionRoot();
   if (!root) return;
 
