@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+console.log("🔥 Vercel built this with API URL:", import.meta.env.VITE_API_BASE_URL);
+console.log("🚀 Final API URL being used:", API_BASE_URL);
 
 export function useUpload(onSuccess) {
   const [loading, setLoading] = useState(false)
