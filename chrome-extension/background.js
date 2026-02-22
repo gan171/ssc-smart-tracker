@@ -57,7 +57,7 @@ async function sendToBackendIfConfigured(capture) {
   const { sscBackendUrl, sscBackendToken } = await getStoredState();
 
   // Fallback to localhost if not configured, but require the token
-  const backendUrl = sscBackendUrl || 'http://localhost:8000/import-question/';
+  const backendUrl = sscBackendUrl || 'https://ssc-smart-tracker.onrender.com/import-question/';
 
   if (!sscBackendToken) {
     throw new Error("Authentication token is missing. Please log in via the extension options.");

@@ -46,7 +46,8 @@ ALLOWED_ORIGINS=[
     ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,   # Strictly restricted origins
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"^chrome-extension://.*",# Strictly restricted origins
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"], # Be explicit instead of "*"
     allow_headers=["*"],

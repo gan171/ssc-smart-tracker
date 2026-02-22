@@ -457,20 +457,73 @@ function createReviewModal(scrapedPayload, questionKey, button) {
 
   captureBtn.addEventListener('click', () => {
     captureBtn.disabled = true;
-    captureBtn.textContent = 'Capturing...';
+    captureBtn.textContent = 'Capturing & Cropping...';
 
     safeSendMessage({ type: 'SSC_TRACKER_CAPTURE_SCREENSHOT' }, (resp) => {
-      captureBtn.disabled = false;
-      captureBtn.textContent = 'Capture Screenshot';
-
       if (!resp?.ok || !resp?.dataUrl) {
+        captureBtn.disabled = false;
+        captureBtn.textContent = 'Capture Screenshot';
         showNotification('Screenshot capture failed. You can upload manually.', 'error');
         return;
       }
 
-      screenshotField.value = resp.dataUrl;
-      screenshotStatus.textContent = 'Screenshot attached';
-      showNotification('Screenshot captured.', 'success');
+      // ==========================================
+      // FEATURE: Auto-Crop Screenshot
+      // ==========================================
+      const root = resolveCurrentQuestionRoot();
+
+      // If no question root is found, just use the full screenshot
+      if (!root) {
+        finishCapture(resp.dataUrl);
+        return;
+      }
+
+      // Get the exact coordinates of the question block
+      const rect = root.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+
+      // Load the full screenshot into an image object
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Add 20px of padding around the question so it doesn't look cramped
+        const pad = 20;
+
+        // Calculate crop coordinates (adjusting for high-res Retina displays)
+        let sx = (rect.left - pad) * dpr;
+        let sy = (rect.top - pad) * dpr;
+        let sWidth = (rect.width + pad * 2) * dpr;
+        let sHeight = (rect.height + pad * 2) * dpr;
+
+        // Prevent cropping outside the bounds of the image
+        if (sx < 0) { sWidth += sx; sx = 0; }
+        if (sy < 0) { sHeight += sy; sy = 0; }
+        if (sx + sWidth > img.width) sWidth = img.width - sx;
+        if (sy + sHeight > img.height) sHeight = img.height - sy;
+
+        canvas.width = sWidth;
+        canvas.height = sHeight;
+
+        // Draw only the cropped portion to the invisible canvas
+        ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+
+        // Convert the cropped canvas back to a base64 image URL
+        finishCapture(canvas.toDataURL('image/png'));
+      };
+
+      img.src = resp.dataUrl; // Trigger the image load
+
+      // Helper function to update the UI once the crop is done
+      function finishCapture(finalDataUrl) {
+        captureBtn.disabled = false;
+        captureBtn.textContent = 'Capture Screenshot';
+        screenshotField.value = finalDataUrl;
+        screenshotStatus.textContent = 'Auto-cropped screenshot attached!';
+        screenshotStatus.style.color = "green";
+        showNotification('Question auto-cropped successfully.', 'success');
+      }
     });
   });
 
@@ -584,7 +637,26 @@ function ensureSingleQuestionButton() {
 
   removeDuplicateButtons();
 }
+// ==========================================
+// FEATURE: Ninja Mode (Keyboard Shortcut)
+// ==========================================
+document.addEventListener('keydown', (e) => {
+  // Listen for Alt + S (or Option + S on Mac)
+  if (e.altKey && e.key.toLowerCase() === 's') {
+    e.preventDefault(); // Stop default browser saving behavior
 
+    // Find the button and click it
+    const trackBtn = document.getElementById(BUTTON_ID);
+    if (trackBtn && !trackBtn.disabled) {
+      trackBtn.click();
+    } else if (!isModalOpen) {
+      // If the button hasn't injected yet, force it and click
+      ensureSingleQuestionButton();
+      const injectedBtn = document.getElementById(BUTTON_ID);
+      if (injectedBtn) injectedBtn.click();
+    }
+  }
+});
 function bootstrap() {
   if (!isTestbookSolutionPage()) return;
 

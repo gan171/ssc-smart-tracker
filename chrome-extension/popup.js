@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 2. Save settings when button is clicked
   saveBtn.addEventListener('click', () => {
-    const backendUrl = urlInput.value.trim() || 'http://127.0.0.1:8000';
+    const backendUrl = urlInput.value.trim() || 'https://ssc-smart-tracker.onrender.com';
     const backendToken = tokenInput.value.trim();
 
     chrome.storage.local.set({
@@ -47,4 +47,27 @@ document.addEventListener('DOMContentLoaded', () => {
       }, 2000);
     });
   });
+  // 3. Reset Extension Data
+  const resetBtn = document.getElementById('resetBtn');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (confirm("Are you sure? This will clear all saved extension data and your token.")) {
+        chrome.storage.local.clear(() => {
+          statusTxt.textContent = "Data cleared! Please reopen the extension.";
+          statusTxt.style.color = "#ef4444";
+          statusTxt.style.display = 'block';
+
+          // Clear the UI inputs
+          urlInput.value = '';
+          tokenInput.value = '';
+          totalAddedEl.textContent = '0';
+          lastAddedEl.textContent = 'Never';
+
+          setTimeout(() => {
+            window.close();
+          }, 2000);
+        });
+      }
+    });
+  }
 });
