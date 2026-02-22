@@ -14,7 +14,8 @@
     "http://localhost:3000/*",
     "http://localhost:5173/*",
     "http://localhost:8000/*",
-    "https://*.testbook.com/*"
+    "https://*.testbook.com/*",
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
