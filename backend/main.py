@@ -41,8 +41,8 @@ ALLOWED_ORIGINS=[
         "http://localhost:5173",  # Local Vite frontend
         "http://127.0.0.1:5173",  # Local Vite frontend alternate
         "http://localhost:5173",  # Local frontend (if using port 3000)
-        "https://ssc-smart-tracker.vercel.app",  # TODO: Add your actual production frontend URL
-        "chrome-extension://oahgmbneapjnkmmncgkjlkicdngobfoe"  # TODO: Replace with your actual Chrome Extension ID
+        "https://ssc-smart-tracker.vercel.app",
+        "chrome-extension://oahgmbneapjnkmmncgkjlkicdngobfoe"
     ]
 app.add_middleware(
     CORSMiddleware,
