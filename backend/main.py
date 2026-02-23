@@ -42,6 +42,7 @@ ALLOWED_ORIGINS=[
         "http://127.0.0.1:5173",  # Local Vite frontend alternate
         "http://localhost:5173",  # Local frontend (if using port 3000)
         "https://ssc-smart-tracker.vercel.app",
+        "https://kohinoorssctracker.vercel.app",
         "chrome-extension://oahgmbneapjnkmmncgkjlkicdngobfoe"
     ]
 app.add_middleware(
