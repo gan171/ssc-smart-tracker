@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from './AuthContext'
 import { useQuestions } from './hooks/useQuestions'
 import { useUpload } from './hooks/useUpload'
@@ -45,7 +45,8 @@ function App() {
   const [showExportModal, setShowExportModal] = useState(false)
   const [showMockSummary, setShowMockSummary] = useState(false)
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 })
-  const [selectedQuestion, setSelectedQuestion] = useState(null)
+  const [bulkSummary, setBulkSummary] = useState(null)
+  const [selectedQuestionId, setSelectedQuestionId] = useState(null)
   const [lastMockSummary, setLastMockSummary] = useState(null)
 
   // Theme
@@ -70,16 +71,32 @@ function App() {
   }
 
   const handleBulkUpload = async (files) => {
-    await uploadBulk(files, setBulkProgress)
-    setShowBulkModal(false)
+    setBulkSummary(null)
+    setBulkProgress({ current: 0, total: files.length })
+    const summary = await uploadBulk(files, setBulkProgress)
+    setBulkSummary(summary)
   }
 
+  const selectedQuestionIndex = useMemo(
+    () => mistakes.findIndex((question) => question.id === selectedQuestionId),
+    [mistakes, selectedQuestionId]
+  )
+
+  const selectedQuestion = selectedQuestionIndex >= 0 ? mistakes[selectedQuestionIndex] : null
+
   const handleQuestionClick = (question) => {
-    setSelectedQuestion(question)
+    setSelectedQuestionId(question.id)
+  }
+
+  const handleNavigateQuestion = (direction) => {
+    if (selectedQuestionIndex < 0) return
+    const nextIndex = selectedQuestionIndex + direction
+    if (nextIndex < 0 || nextIndex >= mistakes.length) return
+    setSelectedQuestionId(mistakes[nextIndex].id)
   }
 
   const handleCloseAnalysis = () => {
-    setSelectedQuestion(null)
+    setSelectedQuestionId(null)
     clearAnalysis()
   }
 
@@ -207,10 +224,15 @@ function App() {
 
       <BulkUploadModal
         isOpen={showBulkModal}
-        onClose={() => setShowBulkModal(false)}
+        onClose={() => {
+          setShowBulkModal(false)
+          setBulkSummary(null)
+          setBulkProgress({ current: 0, total: 0 })
+        }}
         onUpload={handleBulkUpload}
         loading={uploadLoading}
         progress={bulkProgress}
+        summary={bulkSummary}
       />
 
       <AnalysisModal
@@ -218,6 +240,10 @@ function App() {
         analysis={analysis || (selectedQuestion?.content)}
         question={selectedQuestion}
         onClose={handleCloseAnalysis}
+        onPrev={() => handleNavigateQuestion(-1)}
+        onNext={() => handleNavigateQuestion(1)}
+        hasPrev={selectedQuestionIndex > 0}
+        hasNext={selectedQuestionIndex >= 0 && selectedQuestionIndex < mistakes.length - 1}
       />
 
       <ExportModal
