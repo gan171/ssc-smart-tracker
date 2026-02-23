@@ -56,13 +56,14 @@ app.add_middleware(
 
 # Supabase configuration
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+# Auth client should use anon key/JWT key path, not service role key.
+SUPABASE_AUTH_KEY = os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_KEY")
 
 print(f"🔍 Supabase URL: {SUPABASE_URL}")
-print(f"🔍 Supabase Key loaded: {'✅ YES' if SUPABASE_KEY else '❌ NO'}")
+print(f"🔍 Supabase Auth Key loaded: {'✅ YES' if SUPABASE_AUTH_KEY else '❌ NO'}")
 
 # Create Supabase client for auth
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_AUTH_KEY)
 
 
 async def get_current_user(authorization: Optional[str] = Header(None)):
@@ -183,10 +184,12 @@ async def upload_screenshot(
             .execute()
 
         new_id = None
+        is_duplicate = False
 
         if existing_q.data:
             print(f"♻️ Duplicate found. Using existing ID: {existing_q.data[0]['id']}")
             new_id = existing_q.data[0]['id']
+            is_duplicate = True
 
             # Update with new image and analysis if available
             if image_url:
@@ -213,7 +216,8 @@ async def upload_screenshot(
             "data": ai_data,
             "image_url": image_url,
             "has_visual_elements": ai_data.get("has_visual_elements", False),
-            "ai_confidence": ai_data.get("ai_confidence", "high")
+            "ai_confidence": ai_data.get("ai_confidence", "high"),
+            "is_duplicate": is_duplicate
         }
 
     except HTTPException:
