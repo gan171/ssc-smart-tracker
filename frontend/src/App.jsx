@@ -13,10 +13,11 @@ import MockTest from './MockTest'
 // Components
 import UploadModal from './components/UploadModal'
 import BulkUploadModal from './components/BulkUploadModal'
-import AnalysisModal from './components/AnalysisModal'
+import StudyView from './components/StudyView'
 import ExportModal from './components/ExportModal'
 import TopNav from './components/TopNav'
 import MockSummaryModal from './components/MockSummaryModal'
+import ManualEntryModal from './components/ManualEntryModal'
 
 import { Loader2 } from 'lucide-react'
 
@@ -24,7 +25,18 @@ function App() {
   const { user, signOut, loading: authLoading } = useAuth()
 
   // Custom hooks
-  const { mistakes, loading: questionsLoading, refetch, addNote } = useQuestions(user)
+  const {
+    mistakes,
+    loading: questionsLoading,
+    loadingMore,
+    hasMore,
+    refetch,
+    loadMore,
+    addNote,
+    updateQuestion,
+    deleteQuestion,
+    createManualQuestion
+  } = useQuestions(user)
   const {
     loading: uploadLoading,
     error: uploadError,
@@ -44,6 +56,7 @@ function App() {
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   const [showMockSummary, setShowMockSummary] = useState(false)
+  const [showManualEntry, setShowManualEntry] = useState(false)
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 })
   const [bulkSummary, setBulkSummary] = useState(null)
   const [selectedQuestionId, setSelectedQuestionId] = useState(null)
@@ -210,7 +223,17 @@ function App() {
         onMockTestClick={handleMockTest}
         onQuestionClick={handleQuestionClick}
         onAddNote={addNote}
+        onDeleteQuestion={async (q) => {
+          if (confirm('Delete this question permanently?')) {
+            await deleteQuestion(q.id)
+            if (selectedQuestionId === q.id) setSelectedQuestionId(null)
+          }
+        }}
         onExportClick={() => setShowExportModal(true)}
+        onManualEntryClick={() => setShowManualEntry(true)}
+        onLoadMore={loadMore}
+        hasMore={hasMore}
+        loadingMore={loadingMore}
         darkMode={darkMode}
       />
 
@@ -235,15 +258,28 @@ function App() {
         summary={bulkSummary}
       />
 
-      <AnalysisModal
-        isOpen={!!(analysis || selectedQuestion)}
-        analysis={analysis || (selectedQuestion?.content)}
+      <StudyView
+        isOpen={!!selectedQuestion}
         question={selectedQuestion}
         onClose={handleCloseAnalysis}
         onPrev={() => handleNavigateQuestion(-1)}
         onNext={() => handleNavigateQuestion(1)}
         hasPrev={selectedQuestionIndex > 0}
         hasNext={selectedQuestionIndex >= 0 && selectedQuestionIndex < mistakes.length - 1}
+        onDelete={async (q) => {
+          if (confirm('Delete this question permanently?')) {
+            await deleteQuestion(q.id)
+            handleCloseAnalysis()
+          }
+        }}
+        onSave={updateQuestion}
+        onAddNote={addNote}
+      />
+
+      <ManualEntryModal
+        isOpen={showManualEntry}
+        onClose={() => setShowManualEntry(false)}
+        onSubmit={createManualQuestion}
       />
 
       <ExportModal

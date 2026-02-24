@@ -17,12 +17,18 @@ function Dashboard({
   onMockTestClick,
   onQuestionClick,
   onAddNote,
-  onExportClick
+  onExportClick,
+  onDeleteQuestion,
+  onManualEntryClick,
+  onLoadMore,
+  hasMore,
+  loadingMore
 }) {
   const [activeTab, setActiveTab] = useState('recent')
   const [editingNote, setEditingNote] = useState(null)
   const [noteText, setNoteText] = useState('')
   const [bankFilter, setBankFilter] = useState('All')
+  const [searchTerm, setSearchTerm] = useState('')
   const [animatedStats, setAnimatedStats] = useState({ total: 0, accuracy: 0, streak: 0, xp: 0 })
 
   const stats = useMemo(() => {
@@ -118,9 +124,13 @@ function Dashboard({
     return acc
   }, {})
 
-  const filteredBank = bankFilter === 'All'
+  const subjectFiltered = bankFilter === 'All'
     ? mistakes
     : mistakes.filter((m) => m.subject === bankFilter)
+  const filteredBank = subjectFiltered.filter((m) => {
+    const haystack = `${m.question_text || ''} ${m.topic || ''}`.toLowerCase()
+    return haystack.includes(searchTerm.toLowerCase())
+  })
 
   const recentUploads = mistakes.slice(0, 8)
 
@@ -181,16 +191,17 @@ function Dashboard({
               <textarea
                 autoFocus
                 value={noteText}
+                onClick={(e) => e.stopPropagation()}
                 onChange={(e) => setNoteText(e.target.value)}
                 className="flex-1 text-sm p-2 border rounded-md dark:bg-gray-800 dark:text-white dark:border-gray-600 focus:ring-2 focus:ring-blue-500"
                 rows="2"
                 placeholder="Type your notes here..."
               />
               <div className="flex flex-col gap-2">
-                <button onClick={() => handleSaveNote(q)} className="p-1.5 bg-green-100 text-green-600 rounded-md hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400">
+                <button onClick={(e) => { e.stopPropagation(); handleSaveNote(q) }} className="p-1.5 bg-green-100 text-green-600 rounded-md hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400">
                   <Save size={14} />
                 </button>
-                <button onClick={() => setEditingNote(null)} className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400">
+                <button onClick={(e) => { e.stopPropagation(); setEditingNote(null) }} className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400">
                   Cancel
                 </button>
               </div>
@@ -199,17 +210,18 @@ function Dashboard({
             <div className="flex items-start gap-2">
               <div className="flex-1 text-sm text-gray-700 dark:text-gray-300">📝 {q.manual_notes}</div>
               <button
-                onClick={() => handleStartEditNote(q)}
+                onClick={(e) => { e.stopPropagation(); handleStartEditNote(q) }}
                 className="text-blue-600 dark:text-blue-400 hover:text-blue-700"
               >
                 <Edit3 size={14} />
               </button>
+              <button onClick={(e) => { e.stopPropagation(); onDeleteQuestion && onDeleteQuestion(q) }} className="text-red-600 hover:text-red-700"><Circle size={14} /></button>
             </div>
           )}
         </div>
       ) : (
         <button
-          onClick={() => handleStartEditNote(q)}
+          onClick={(e) => { e.stopPropagation(); handleStartEditNote(q) }}
           className="mt-2 ml-14 text-xs text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-1"
         >
           <Edit3 size={12} />
@@ -374,7 +386,8 @@ function Dashboard({
           <div className="p-6">
             {activeTab === 'recent' && (
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Recent Uploads</h3>
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Recent Uploads</h3>
+                <button onClick={onManualEntryClick} className="mb-4 px-3 py-2 rounded bg-indigo-600 text-white text-sm">Manual Entry</button>
                 {loading ? <SkeletonList /> : recentUploads.length === 0 ? (
                   <div className="text-center py-12 text-gray-500 dark:text-gray-400"><Upload size={48} className="mx-auto mb-4 opacity-50" /><p>No questions uploaded yet. Start by uploading your first mistake!</p></div>
                 ) : (
@@ -394,6 +407,13 @@ function Dashboard({
                   <div className="text-sm text-gray-500 dark:text-gray-400">{filteredBank.length} questions</div>
                 </div>
 
+                <input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search by question text or topic"
+                  className="w-full mb-4 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-800"
+                />
+
                 <div className="flex flex-wrap gap-2 mb-6">
                   <button onClick={() => setBankFilter('All')} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${bankFilter === 'All' ? 'bg-blue-500 text-white shadow-md' : 'bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-200 dark:border-blue-800 text-gray-700 dark:text-gray-300 hover:border-blue-400'}`}>All: {stats.totalQuestions}</button>
                   {Object.entries(subjectCounts).map(([subject, count]) => (
@@ -405,6 +425,14 @@ function Dashboard({
                   <div className="text-center py-12 text-gray-500 dark:text-gray-400"><BookOpen size={48} className="mx-auto mb-4 opacity-50" /><p>No questions in this category yet.</p></div>
                 ) : (
                   <div className="space-y-3">{filteredBank.map((q) => <QuestionCard key={q.id} q={q} />)}</div>
+                )}
+
+                {hasMore && (
+                  <div className="mt-5 text-center">
+                    <button onClick={onLoadMore} disabled={loadingMore} className="px-4 py-2 rounded-lg border">
+                      {loadingMore ? 'Loading...' : 'Load More'}
+                    </button>
+                  </div>
                 )}
               </div>
             )}
