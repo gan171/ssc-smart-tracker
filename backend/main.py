@@ -37,6 +37,26 @@ class CustomPdfPayload(BaseModel):
     filters: PdfFilters
     options: PdfOptions
 
+
+class QuestionUpdatePayload(BaseModel):
+    question_text: Optional[str] = None
+    options: Optional[list] = None
+    correct_option: Optional[str] = None
+    subject: Optional[str] = None
+    topic: Optional[str] = None
+    manual_notes: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+class ManualQuestionPayload(BaseModel):
+    question_text: str
+    options: list
+    correct_option: str
+    subject: str
+    topic: str
+    manual_notes: Optional[str] = ""
+    image_url: Optional[str] = None
+
 ALLOWED_ORIGINS=[
         "http://localhost:5173",  # Local Vite frontend
         "http://127.0.0.1:5173",  # Local Vite frontend alternate
@@ -230,20 +250,27 @@ async def upload_screenshot(
 
 
 @app.get("/mistakes/")
-def get_mistakes(user_id: str = Depends(get_current_user)):
+def get_mistakes(limit: int = 25, offset: int = 0, user_id: str = Depends(get_current_user)):
     """Fetches user's mistakes with enhanced data"""
     try:
         print(f"\n📋 FETCHING MISTAKES for user: {user_id}")
 
+        safe_limit = max(1, min(limit, 100))
+        safe_offset = max(0, offset)
         response = supabase_admin.table("questions") \
             .select("*") \
             .eq("user_id", user_id) \
             .order("created_at", desc=True) \
-            .limit(100) \
+            .range(safe_offset, safe_offset + safe_limit - 1) \
             .execute()
 
         print(f"✅ Found {len(response.data)} mistakes\n")
-        return response.data
+        return {
+            "items": response.data,
+            "offset": safe_offset,
+            "limit": safe_limit,
+            "has_more": len(response.data) == safe_limit
+        }
 
     except Exception as e:
         print(f"❌ Error fetching mistakes: {e}")
@@ -265,6 +292,81 @@ def get_question(question_id: str, user_id: str = Depends(get_current_user)):
 
     except Exception as e:
         raise HTTPException(status_code=404, detail="Question not found")
+
+
+@app.patch("/question/{question_id}")
+def update_question(question_id: str, payload: QuestionUpdatePayload, user_id: str = Depends(get_current_user)):
+    try:
+        updates = {k: v for k, v in payload.model_dump().items() if v is not None}
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        response = supabase_admin.table("questions") \
+            .update(updates) \
+            .eq("id", question_id) \
+            .eq("user_id", user_id) \
+            .execute()
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        return {"status": "success", "item": response.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/question/{question_id}")
+def delete_question(question_id: str, user_id: str = Depends(get_current_user)):
+    try:
+        response = supabase_admin.table("questions") \
+            .delete() \
+            .eq("id", question_id) \
+            .eq("user_id", user_id) \
+            .execute()
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Question not found")
+
+        return {"status": "deleted", "id": question_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/questions/manual")
+def create_manual_question(payload: ManualQuestionPayload, user_id: str = Depends(get_current_user)):
+    try:
+        db_data = {
+            "user_id": user_id,
+            "question_text": payload.question_text,
+            "options": payload.options,
+            "correct_option": payload.correct_option,
+            "subject": payload.subject,
+            "topic": payload.topic,
+            "manual_notes": payload.manual_notes,
+            "image_url": payload.image_url,
+            "status": "manual",
+            "content": {
+                "question_text": payload.question_text,
+                "options": payload.options,
+                "correct_answer": payload.correct_option,
+                "subject": payload.subject,
+                "topic": payload.topic,
+                "detailed_analysis": "Manual entry question"
+            }
+        }
+
+        response = supabase_admin.table("questions").insert(db_data).execute()
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Failed to create question")
+        return {"status": "success", "item": response.data[0]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.patch("/question/{question_id}/answer")
