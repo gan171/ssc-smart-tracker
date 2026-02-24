@@ -1,6 +1,6 @@
-import { Moon, Sun, LogOut, User, LayoutDashboard, IdCard } from 'lucide-react'
+import { Moon, Sun, LogOut, User, LayoutDashboard, IdCard, Settings } from 'lucide-react'
 
-function TopNav({ user, darkMode, currentView, onChangeView, onToggleDarkMode, onSignOut }) {
+function TopNav({ user, darkMode, currentView, onChangeView, onToggleDarkMode, onOpenSettings, onSignOut }) {
   return (
     <div className="sticky top-0 z-50 backdrop-blur-xl bg-white/70 dark:bg-gray-900/70 border-b border-gray-200/50 dark:border-gray-700/50">
       <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
@@ -28,6 +28,14 @@ function TopNav({ user, darkMode, currentView, onChangeView, onToggleDarkMode, o
             title="Profile"
           >
             <IdCard size={18} />
+          </button>
+
+          <button
+            onClick={onOpenSettings}
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+            title="API Settings"
+          >
+            <Settings size={18} />
           </button>
           <button
             onClick={onToggleDarkMode}

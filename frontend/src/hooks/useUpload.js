@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 const BULK_CONCURRENCY = 3
+const GEMINI_API_KEY_STORAGE_KEY = 'ssc_gemini_api_key'
 
 console.log('🔥 Vercel built this with API URL:', import.meta.env.VITE_API_BASE_URL)
 console.log('🚀 Final API URL being used:', API_BASE_URL)
@@ -27,6 +28,11 @@ export function useUpload(onSuccess) {
   const [error, setError] = useState(null)
   const [analysis, setAnalysis] = useState(null)
 
+  const getGeminiHeader = () => {
+    const key = localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY)
+    return key?.trim() ? { 'X-Gemini-Api-Key': key.trim() } : {}
+  }
+
   const uploadSingle = async (file) => {
     setLoading(true)
     setError(null)
@@ -41,7 +47,8 @@ export function useUpload(onSuccess) {
       const response = await fetch(`${API_BASE_URL}/upload-screenshot/`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${session?.access_token}`
+          Authorization: `Bearer ${session?.access_token}`,
+          ...getGeminiHeader()
         },
         body: formData
       })
@@ -57,7 +64,7 @@ export function useUpload(onSuccess) {
 
       return result.data
     } catch (err) {
-      setError('Failed to analyze image. Please try again.')
+      setError(err?.message || 'Failed to analyze image. Please try again.')
       console.error(err)
       throw err
     } finally {
@@ -117,7 +124,8 @@ export function useUpload(onSuccess) {
       const response = await fetch(`${API_BASE_URL}/upload-screenshot/`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
+          ...getGeminiHeader()
         },
         body: formData
       })

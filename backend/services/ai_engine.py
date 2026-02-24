@@ -11,8 +11,7 @@ import io
 import json
 import re
 
-# Configure Gemini
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+DEFAULT_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 ENHANCED_SYSTEM_PROMPT = """You are an arrogant, cocky, and brutally honest SSC CGL teacher who doesn't tolerate mediocrity. You've cracked every SSC exam with top ranks and now you're here to turn average aspirants into champions. Your tone is dismissive of lazy thinking, impatient with obvious mistakes, but deeply knowledgeable and genuinely invested in making students excel.
 
@@ -253,7 +252,7 @@ def parse_json_safely(json_string):
     return None
 
 
-def analyze_screenshot(image_bytes):
+def analyze_screenshot(image_bytes, api_key=None):
     """
     Enhanced analysis with complete question extraction, visual detection,
     cocky personality, and proper content structure
@@ -263,6 +262,12 @@ def analyze_screenshot(image_bytes):
 
         # Load image
         image = Image.open(io.BytesIO(image_bytes))
+
+        active_api_key = api_key or DEFAULT_GEMINI_API_KEY
+        if not active_api_key:
+            raise ValueError("Missing Gemini API key for analysis")
+
+        genai.configure(api_key=active_api_key)
 
         # Configure model with latest Flash
         model = genai.GenerativeModel('gemini-flash-latest')

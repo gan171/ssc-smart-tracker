@@ -19,6 +19,7 @@ import ExportModal from './components/ExportModal'
 import TopNav from './components/TopNav'
 import MockSummaryModal from './components/MockSummaryModal'
 import ManualEntryModal from './components/ManualEntryModal'
+import ApiKeySettingsModal from './components/ApiKeySettingsModal'
 
 import { Loader2 } from 'lucide-react'
 
@@ -41,7 +42,6 @@ function App() {
   const {
     loading: uploadLoading,
     error: uploadError,
-    analysis,
     uploadSingle,
     uploadBulk,
     clearAnalysis
@@ -58,6 +58,7 @@ function App() {
   const [showExportModal, setShowExportModal] = useState(false)
   const [showMockSummary, setShowMockSummary] = useState(false)
   const [showManualEntry, setShowManualEntry] = useState(false)
+  const [showApiKeySettings, setShowApiKeySettings] = useState(false)
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 })
   const [bulkSummary, setBulkSummary] = useState(null)
   const [selectedQuestionId, setSelectedQuestionId] = useState(null)
@@ -215,6 +216,7 @@ function App() {
         currentView={currentView}
         onChangeView={setCurrentView}
         onToggleDarkMode={() => setDarkMode(!darkMode)}
+        onOpenSettings={() => setShowApiKeySettings(true)}
         onSignOut={handleSignOut}
       />
 
@@ -293,6 +295,11 @@ function App() {
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         mistakes={mistakes}
+      />
+
+      <ApiKeySettingsModal
+        isOpen={showApiKeySettings}
+        onClose={() => setShowApiKeySettings(false)}
       />
 
       <MockSummaryModal
