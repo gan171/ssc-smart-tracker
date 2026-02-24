@@ -7,6 +7,7 @@ import { useUpload } from './hooks/useUpload'
 import LandingPage from './LandingPage'
 import Auth from './Auth'
 import Dashboard from './Dashboard'
+import ProfilePage from './ProfilePage'
 import MockTestSetup from './MockTestSetup'
 import MockTest from './MockTest'
 
@@ -18,6 +19,7 @@ import ExportModal from './components/ExportModal'
 import TopNav from './components/TopNav'
 import MockSummaryModal from './components/MockSummaryModal'
 import ManualEntryModal from './components/ManualEntryModal'
+import ApiKeySettingsModal from './components/ApiKeySettingsModal'
 
 import { Loader2 } from 'lucide-react'
 
@@ -40,7 +42,6 @@ function App() {
   const {
     loading: uploadLoading,
     error: uploadError,
-    analysis,
     uploadSingle,
     uploadBulk,
     clearAnalysis
@@ -57,6 +58,7 @@ function App() {
   const [showExportModal, setShowExportModal] = useState(false)
   const [showMockSummary, setShowMockSummary] = useState(false)
   const [showManualEntry, setShowManualEntry] = useState(false)
+  const [showApiKeySettings, setShowApiKeySettings] = useState(false)
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 })
   const [bulkSummary, setBulkSummary] = useState(null)
   const [selectedQuestionId, setSelectedQuestionId] = useState(null)
@@ -211,31 +213,38 @@ function App() {
       <TopNav
         user={user}
         darkMode={darkMode}
+        currentView={currentView}
+        onChangeView={setCurrentView}
         onToggleDarkMode={() => setDarkMode(!darkMode)}
+        onOpenSettings={() => setShowApiKeySettings(true)}
         onSignOut={handleSignOut}
       />
 
-      <Dashboard
-        mistakes={mistakes}
-        loading={questionsLoading}
-        onUploadClick={() => setShowUploadModal(true)}
-        onBulkUploadClick={() => setShowBulkModal(true)}
-        onMockTestClick={handleMockTest}
-        onQuestionClick={handleQuestionClick}
-        onAddNote={addNote}
-        onDeleteQuestion={async (q) => {
-          if (confirm('Delete this question permanently?')) {
-            await deleteQuestion(q.id)
-            if (selectedQuestionId === q.id) setSelectedQuestionId(null)
-          }
-        }}
-        onExportClick={() => setShowExportModal(true)}
-        onManualEntryClick={() => setShowManualEntry(true)}
-        onLoadMore={loadMore}
-        hasMore={hasMore}
-        loadingMore={loadingMore}
-        darkMode={darkMode}
-      />
+      {currentView === 'profile' ? (
+        <ProfilePage user={user} mistakes={mistakes} />
+      ) : (
+        <Dashboard
+          mistakes={mistakes}
+          loading={questionsLoading}
+          onUploadClick={() => setShowUploadModal(true)}
+          onBulkUploadClick={() => setShowBulkModal(true)}
+          onMockTestClick={handleMockTest}
+          onQuestionClick={handleQuestionClick}
+          onAddNote={addNote}
+          onDeleteQuestion={async (q) => {
+            if (confirm('Delete this question permanently?')) {
+              await deleteQuestion(q.id)
+              if (selectedQuestionId === q.id) setSelectedQuestionId(null)
+            }
+          }}
+          onExportClick={() => setShowExportModal(true)}
+          onManualEntryClick={() => setShowManualEntry(true)}
+          onLoadMore={loadMore}
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          darkMode={darkMode}
+        />
+      )}
 
       <UploadModal
         isOpen={showUploadModal}
@@ -286,6 +295,11 @@ function App() {
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         mistakes={mistakes}
+      />
+
+      <ApiKeySettingsModal
+        isOpen={showApiKeySettings}
+        onClose={() => setShowApiKeySettings(false)}
       />
 
       <MockSummaryModal

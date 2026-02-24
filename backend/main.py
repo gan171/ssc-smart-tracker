@@ -17,6 +17,10 @@ from pydantic import BaseModel, Field
 
 app = FastAPI(title="SSC CGL Smart Tracker API")
 
+ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
+MASTER_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+FREE_DAILY_UPLOAD_LIMIT = int(os.getenv("FREE_DAILY_UPLOAD_LIMIT", "15"))
+
 
 class PdfFilters(BaseModel):
     subject: str = "all"
@@ -118,10 +122,45 @@ def read_root():
 @app.post("/upload-screenshot/")
 async def upload_screenshot(
         file: UploadFile = File(...),
-        user_id: str = Depends(get_current_user)
+        user_id: str = Depends(get_current_user),
+        x_gemini_api_key: Optional[str] = Header(default=None)
 ):
     try:
         print(f"\n📤 UPLOAD REQUEST from user: {user_id}")
+
+        user_supplied_key = (x_gemini_api_key or "").strip() or None
+        is_admin = bool(ADMIN_USER_ID and user_id == ADMIN_USER_ID)
+
+        if not user_supplied_key:
+            day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day_start + timedelta(days=1)
+
+            todays_uploads = supabase_admin.table("questions") \
+                .select("id", count="exact") \
+                .eq("user_id", user_id) \
+                .gte("created_at", day_start.isoformat()) \
+                .lt("created_at", day_end.isoformat()) \
+                .execute()
+
+            used_today = todays_uploads.count or 0
+            if used_today >= FREE_DAILY_UPLOAD_LIMIT:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Free daily limit reached. Add your Gemini API key in settings to continue uploads."
+                )
+
+        if user_supplied_key:
+            effective_api_key = user_supplied_key
+            key_mode = "user"
+        else:
+            effective_api_key = MASTER_GEMINI_API_KEY
+            key_mode = "admin-master" if is_admin else "free-tier"
+
+        if not effective_api_key:
+            raise HTTPException(
+                status_code=503,
+                detail="Gemini API key is unavailable. Please add your own key in settings."
+            )
 
         # 1. Read the image file
         contents = await file.read()
@@ -154,7 +193,8 @@ async def upload_screenshot(
 
         # 3. Get Enhanced Analysis from Gemini
         print("🤖 Calling Gemini AI for enhanced analysis...")
-        ai_data = analyze_screenshot(contents)
+        print(f"🔐 Upload mode: {key_mode}")
+        ai_data = analyze_screenshot(contents, api_key=effective_api_key)
 
         if "error" in ai_data:
             print(f"❌ Gemini error: {ai_data['error']}")
