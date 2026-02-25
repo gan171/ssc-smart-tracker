@@ -10,6 +10,7 @@ import Dashboard from './Dashboard'
 import ProfilePage from './ProfilePage'
 import MockTestSetup from './MockTestSetup'
 import MockTest from './MockTest'
+import CommunityPage from './CommunityPage'
 
 // Components
 import UploadModal from './components/UploadModal'
@@ -222,6 +223,8 @@ function App() {
 
       {currentView === 'profile' ? (
         <ProfilePage user={user} mistakes={mistakes} />
+      ) : currentView === 'community' ? (
+        <CommunityPage user={user} />
       ) : (
         <Dashboard
           mistakes={mistakes}
