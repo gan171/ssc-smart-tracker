@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { User, Target, Timer, Brain, Award, Activity, Sparkles, Users, ThumbsUp, PenLine } from 'lucide-react'
+import { User, Target, Timer, Brain, Award, Activity, Sparkles, Users, ThumbsUp, PenLine, Trophy, Upload, X } from 'lucide-react'
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts'
 
 const PROFILE_DEFAULTS = {
   name: '',
   examTarget: 'SSC CGL',
   goalScore: '160+',
-  preferredTopics: ''
+  preferredTopics: '',
+  avatarDataUrl: '',
+  achievements: []
 }
 
 function formatDate(value) {
@@ -20,6 +22,7 @@ function formatDate(value) {
 function ProfilePage({ user, mistakes }) {
   const storageKey = `ssc-profile-${user?.id || 'guest'}`
   const [profile, setProfile] = useState(PROFILE_DEFAULTS)
+  const [newAchievement, setNewAchievement] = useState('')
 
   useEffect(() => {
     const saved = localStorage.getItem(storageKey)
@@ -142,6 +145,32 @@ function ProfilePage({ user, mistakes }) {
     setProfile((prev) => ({ ...prev, [field]: value }))
   }
 
+  const handleAvatarUpload = (file) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      setProfile((prev) => ({ ...prev, avatarDataUrl: String(reader.result || '') }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const addAchievement = (e) => {
+    e.preventDefault()
+    if (!newAchievement.trim()) return
+    setProfile((prev) => ({
+      ...prev,
+      achievements: [newAchievement.trim(), ...prev.achievements]
+    }))
+    setNewAchievement('')
+  }
+
+  const removeAchievement = (item) => {
+    setProfile((prev) => ({
+      ...prev,
+      achievements: prev.achievements.filter((achievement) => achievement !== item)
+    }))
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
       <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/60 p-6">
@@ -152,6 +181,21 @@ function ProfilePage({ user, mistakes }) {
       <div className="grid md:grid-cols-2 gap-6">
         <section className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 space-y-4">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2"><Target size={18} /> Identity</h2>
+
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 overflow-hidden flex items-center justify-center">
+              {profile.avatarDataUrl ? (
+                <img src={profile.avatarDataUrl} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <User size={24} className="text-gray-500" />
+              )}
+            </div>
+            <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 text-sm">
+              <Upload size={14} /> Upload photo
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleAvatarUpload(e.target.files?.[0])} />
+            </label>
+          </div>
+
           <div className="grid gap-3">
             <input value={profile.name} onChange={(e) => updateField('name', e.target.value)} placeholder="Name" className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" />
             <input value={profile.examTarget} onChange={(e) => updateField('examTarget', e.target.value)} placeholder="Exam target" className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent" />
@@ -170,6 +214,27 @@ function ProfilePage({ user, mistakes }) {
           </div>
         </section>
       </div>
+
+      <section className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2"><Trophy size={18} /> Achievement Showcase</h2>
+        <form onSubmit={addAchievement} className="mt-4 flex gap-2">
+          <input
+            value={newAchievement}
+            onChange={(e) => setNewAchievement(e.target.value)}
+            placeholder="Add exam or milestone (e.g., SSC CHSL 2024 cleared)"
+            className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-transparent"
+          />
+          <button type="submit" className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">Add</button>
+        </form>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {profile.achievements.length > 0 ? profile.achievements.map((item) => (
+            <span key={item} className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-200 text-sm">
+              <Award size={12} /> {item}
+              <button onClick={() => removeAchievement(item)}><X size={12} /></button>
+            </span>
+          )) : <p className="text-sm text-gray-500">No achievements added yet.</p>}
+        </div>
+      </section>
 
       <div className="grid md:grid-cols-2 gap-6">
         <section className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6">

@@ -1,4 +1,4 @@
-import { Moon, Sun, LogOut, User, LayoutDashboard, IdCard, Settings } from 'lucide-react'
+import { Moon, Sun, LogOut, User, LayoutDashboard, IdCard, Settings, Users } from 'lucide-react'
 
 function TopNav({ user, darkMode, currentView, onChangeView, onToggleDarkMode, onOpenSettings, onSignOut }) {
   return (
@@ -28,6 +28,13 @@ function TopNav({ user, darkMode, currentView, onChangeView, onToggleDarkMode, o
             title="Profile"
           >
             <IdCard size={18} />
+          </button>
+          <button
+            onClick={() => onChangeView('community')}
+            className={`p-2 rounded-lg transition-all ${currentView === 'community' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+            title="Community"
+          >
+            <Users size={18} />
           </button>
 
           <button
